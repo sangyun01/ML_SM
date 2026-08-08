@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>반도체 소자 파라미터 최적화 검색기</title>
+    <!-- 화면을 넓게 쓰기 위해 부트스트랩 적용 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; }
+        .card { border-radius: 10px; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid px-5 mt-4">
+    <h2 class="mb-4 text-center fw-bold"> 최적 파라미터 조합 탐색기 (ML 기반)</h2>
+    
+    <!-- 첫 번째 줄 (위): SHAP 4분할 그래프 영역 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-dark text-white fw-bold">
+                    소자 물리 특성 중요도 해석 (SHAP Analysis)
+                </div>
+                <div class="card-body text-center p-0">
+                    <!-- app.py에서 넘겨준 Base64 이미지를 화면에 띄움 -->
+                    <img src="data:image/png;base64,{{ shap_plot }}" class="img-fluid" style="max-height: 500px;" alt="SHAP Plot">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 두 번째 줄 (아래): 좌우 분할 영역 -->
+    <div class="row">
+        
+        <!-- 아래 왼쪽: 입력 폼 (화면 절반 차지: col-lg-6) -->
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-body p-4">
+                    <h5 class="card-title fw-bold mb-1">목표 스펙 입력 (User Specs)</h5>
+                    <p class="text-muted small mb-4">조건을 적용할 항목의 체크박스를 선택하고 값을 입력하세요.</p>
+                    
+                    <form id="specForm">
+                        <!-- Vth 설정 -->
+                        <div class="row align-items-center mb-3">
+                            <div class="col-2"><input type="checkbox" id="use_Vth" checked> <strong class="ms-1">Vth</strong></div>
+                            <div class="col"><input type="number" step="any" class="form-control" id="min_Vth" placeholder="Min" value="0.6"></div>
+                            <div class="col"><input type="number" step="any" class="form-control" id="max_Vth" placeholder="Max" value="1.0"></div>
+                            <div class="col"><input type="number" step="any" class="form-control" id="target_Vth" placeholder="Target" value="0.8"></div>
+                        </div>
+                        <!-- Id 설정 -->
+                        <div class="row align-items-center mb-3">
+                            <div class="col-2"><input type="checkbox" id="use_Id"> <strong class="ms-1">Id</strong></div>
+                            <div class="col"><input type="number" step="any" class="form-control" id="min_Id" placeholder="Min" value="0.000001"></div>
+                            <div class="col"><input type="number" step="any" class="form-control" id="max_Id" placeholder="Max" value="0.0001"></div>
+                            <div class="col"><input type="number" step="any" class="form-control" id="target_Id" placeholder="Target" value="0.00001"></div>
+                        </div>
+                        <!-- SS 설정 -->
+                        <div class="row align-items-center mb-3">
+                            <div class="col-2"><input type="checkbox" id="use_SS" checked> <strong class="ms-1">SS</strong></div>
+                            <div class="col"><input type="number" step="any" class="form-control" id="min_SS" placeholder="Min" value="60"></div>
+                            <div class="col"><input type="number" step="any" class="form-control" id="max_SS" placeholder="Max" value="100"></div>
+                            <div class="col"><input type="number" step="any" class="form-control" id="target_SS" placeholder="Target" value="70"></div>
+                        </div>
+                        <!-- gm 설정 -->
+                        <div class="row align-items-center mb-4">
+                            <div class="col-2"><input type="checkbox" id="use_gm"> <strong class="ms-1">gm</strong></div>
+                            <div class="col"><input type="number" step="any" class="form-control" id="min_gm" placeholder="Min" value="0.00001"></div>
+                            <div class="col"><input type="number" step="any" class="form-control" id="max_gm" placeholder="Max" value="0.001"></div>
+                            <div class="col"><input type="number" step="any" class="form-control" id="target_gm" placeholder="Target" value="0.0001"></div>
+                        </div>
+                        
+                        <button type="button" class="btn btn-primary w-100 py-2 fw-bold" id="searchBtn">최적 파라미터 검색 시작</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- 아래 오른쪽: 결과 창 (화면 절반 차지: col-lg-6) -->
+        <div class="col-lg-6 mb-4">
+            <!-- 결과를 담는 투명한 배경의 영역 -->
+            <div class="h-100 d-flex flex-column">
+                <h5 class="fw-bold mb-3 px-2">결과 <span id="timeCost" class="text-primary fs-6 fw-normal ms-2"></span></h5>
+                
+                <div id="resultCards" class="flex-grow-1">
+                    <!-- 대기 중일 때 표시되는 안내 문구 -->
+                    <div class="alert alert-secondary border-0" role="alert">
+                        왼쪽 폼에서 목표 스펙을 설정한 후 <strong>[검색 시작]</strong> 버튼을 클릭하세요.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+document.getElementById('searchBtn').addEventListener('click', async function() {
+    const btn = this;
+    btn.disabled = true;
+    btn.innerText = "50만 개 후보군 탐색 중... (잠시만 기다려주세요)";
+    
+    // 데이터 수집
+    let userSpecs = {};
+    const targets = ["Vth", "Id", "SS", "gm"];
+    targets.forEach(t => {
+        if(document.getElementById(`use_${t}`).checked) {
+            userSpecs[t] = {
+                "min": parseFloat(document.getElementById(`min_${t}`).value),
+                "max": parseFloat(document.getElementById(`max_${t}`).value),
+                "target": parseFloat(document.getElementById(`target_${t}`).value)
+            };
+        }
+    });
+
+    try {
+        const response = await fetch('/search', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(userSpecs)
+        });
+        
+        const resData = await response.json();
+        const resultCards = document.getElementById('resultCards');
+        resultCards.innerHTML = ""; 
+        
+        if(resData.status === 'success') {
+            document.getElementById('timeCost').innerText = `(탐색 소요 시간: ${resData.time}초)`;
+            
+            resData.data.forEach(item => {
+                const p = item.params;
+                const cardHtml = `
+                <div class="card border-success mb-3">
+                    <div class="card-header bg-success text-white fw-bold">🏆 Top ${item.rank} 추천 파라미터</div>
+                    <div class="card-body">
+                        <p class="mb-2"><strong>Lg:</strong> ${p[0]} <span class="text-muted mx-1">|</span> <strong>LDD_Dose:</strong> ${p[1]} <span class="text-muted mx-1">|</span> <strong>LDD_Energy:</strong> ${p[2]} <span class="text-muted mx-1">|</span> <strong>SD_Dose:</strong> ${p[3]} <span class="text-muted mx-1">|</span> <strong>SD_Energy:</strong> ${p[4]}</p>
+                        <div class="bg-light p-2 rounded border border-light-subtle">
+                            <span class="text-secondary small">Predict -></span> 
+                            <strong class="ms-2">Vth:</strong> ${item.vth} <span class="text-muted mx-1">|</span> 
+                            <strong>Id:</strong> ${item.id} <span class="text-muted mx-1">|</span> 
+                            <strong>SS:</strong> ${item.ss} <span class="text-muted mx-1">|</span> 
+                            <strong>gm:</strong> ${item.gm}
+                        </div>
+                    </div>
+                </div>`;
+                resultCards.innerHTML += cardHtml;
+            });
+        } else {
+            document.getElementById('timeCost').innerText = "";
+            resultCards.innerHTML = `<div class="alert alert-danger shadow-sm border-0">${resData.message}</div>`;
+        }
+    } catch (err) {
+        alert("서버 통신 중 오류가 발생했습니다.");
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "최적 파라미터 검색 시작";
+    }
+});
+</script>
+</body>
+</html>
