@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-Based TCAD Parameter Optimizer</title>
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Pretendard 폰트 -->
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    
+    <style>
+        :root {
+            --primary-blue: #2563EB; --primary-orange: #F97316;
+            --bg-color: #F4F7F9; --card-border: #E5E7EB;
+            --text-dark: #1F2937; --text-muted: #6B7280;
+        }
+        
+        body { 
+            font-family: 'Pretendard', sans-serif; 
+            font-weight: 500; 
+            background-color: var(--bg-color); 
+            color: var(--text-dark); 
+            padding-bottom: 50px;
+        }
+        
+        .title-header { font-size: 28px; font-weight: 700; color: #111827; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #E5E7EB; }
+        
+        .custom-card { background: #fff; border-radius: 12px; border: 1px solid var(--card-border); box-shadow: 0 4px 20px rgba(0,0,0,0.02); padding: 24px; height: 100%; }
+        .section-title { font-size: 20px; font-weight: 700; display: flex; align-items: center; margin-bottom: 15px; }
+        .section-title::before { content: ''; display: inline-block; width: 14px; height: 14px; background-color: var(--primary-blue); border-radius: 4px; margin-right: 10px; }
+        
+        /* HKMG 옵션 박스 스타일 */
+        .option-box { background-color: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px; padding: 15px 20px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; }
+        
+        .spec-grid { display: grid; grid-template-columns: 0.5fr 1fr 1.5fr 1.5fr 1.5fr; gap: 10px; align-items: center; text-align: center; margin-bottom: 15px; }
+        .spec-header { color: var(--text-muted); font-size: 13px; font-weight: 600; margin-bottom: 15px; border-bottom: 1px solid #E5E7EB; padding-bottom: 10px; }
+        .form-control { text-align: center; border-radius: 6px; border: 1px solid #D1D5DB; font-size: 14px; padding: 6px; }
+        .form-control.target-input { border: 1px solid var(--primary-blue); color: var(--primary-blue); font-weight: 600; background-color: #EFF6FF; }
+        
+        .btn-primary { background-color: var(--primary-blue); border: none; border-radius: 8px; font-weight: 600; padding: 12px; margin-top: 20px; }
+        .btn-outline-analysis { border: 1px solid var(--primary-blue); color: var(--primary-blue); background-color: white; border-radius: 8px; font-weight: 600; padding: 12px; margin-top: 10px; transition: all 0.2s; }
+        .btn-outline-analysis:hover { background-color: #EFF6FF; }
+        
+        .top1-card { display: flex; border: 2px solid var(--primary-orange); border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
+        .top1-badge { background: linear-gradient(135deg, #F97316, #EA580C); color: white; min-width: 130px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 15px; }
+        .param-box { flex: 1; text-align: center; border-right: 1px solid #E5E7EB; padding: 15px 5px; }
+        .param-box:last-child { border-right: none; }
+        .param-title { font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
+        .param-val { font-size: 18px; font-weight: 700; color: #111827; }
+        .param-unit { font-size: 11px; color: #9CA3AF; }
+        
+        .top-sub-card { display: flex; border: 1px solid #D1D5DB; border-radius: 8px; overflow: hidden; margin-bottom: 12px; background-color: #FAFAFA; }
+        .top-sub-badge { background-color: #F3F4F6; color: #4B5563; min-width: 100px; display: flex; justify-content: center; align-items: center; font-weight: 700; font-size: 16px; border-right: 1px solid #D1D5DB; }
+        .top-sub-param-box { flex: 1; text-align: center; border-right: 1px solid #E5E7EB; padding: 10px 5px; }
+        .top-sub-param-box:last-child { border-right: none; }
+        .top-sub-val { font-size: 13px; font-weight: 600; color: #111827; margin-top: 4px; }
+        
+        .tvp-card { border: 1px solid var(--primary-orange); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+        .tvp-table { width: 100%; font-size: 13px; }
+        .tvp-table th { color: var(--text-muted); font-weight: 600; padding-bottom: 15px; border-bottom: 1px solid #E5E7EB; }
+        .tvp-table td { padding: 12px 0; border-bottom: 1px solid #F3F4F6; vertical-align: middle; }
+        .tvp-table td:first-child { font-weight: 600; color: #374151; }
+        .delta-pos { color: var(--primary-orange); font-weight: 600; }
+        .delta-neg { color: var(--primary-blue); font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid" style="max-width: 1400px; padding: 40px;">
+    <div class="title-header">
+        AI-Based TCAD Parameter Optimizer
+    </div>
+
+    <div class="row g-4">
+        
+        <!-- 왼쪽: 목표 스펙 입력 -->
+        <div class="col-lg-4">
+            <div class="custom-card">
+                <div class="section-title">목표 스펙 입력</div>
+                <p class="text-muted" style="font-size: 13px; margin-bottom: 20px;">조건을 적용할 항목의 체크박스를 선택하고 값을 입력하세요.</p>
+
+                <!-- HKMG 물질 선택 옵션 -->
+                <div class="option-box">
+                    <span class="fw-bold" style="font-size: 14px;">Oxide Material</span>
+                    <div class="btn-group" role="group">
+                        <input type="radio" class="btn-check" name="oxideOption" id="oxide_sio2" value="SiO2" autocomplete="off" checked>
+                        <label class="btn btn-outline-primary px-3 py-1" style="font-size: 13px;" for="oxide_sio2">SiO₂</label>
+
+                        <input type="radio" class="btn-check" name="oxideOption" id="oxide_hkmg" value="HKMG" autocomplete="off">
+                        <label class="btn btn-outline-primary px-3 py-1" style="font-size: 13px;" for="oxide_hkmg">HKMG</label>
+                    </div>
+                </div>
+
+                <div class="spec-grid spec-header">
+                    <div>적용</div><div>Metric</div><div>Min</div><div>Target</div><div>Max</div>
+                </div>
+
+                <form id="specForm">
+                    <div class="spec-grid mb-3">
+                        <div><input class="form-check-input" type="checkbox" id="use_Vth" checked></div>
+                        <div class="fw-bold">Vth</div>
+                        <div><input type="number" step="any" class="form-control" id="min_Vth" value="0.60"></div>
+                        <div><input type="number" step="any" class="form-control target-input" id="target_Vth" value="0.80"></div>
+                        <div><input type="number" step="any" class="form-control" id="max_Vth" value="1.00"></div>
+                    </div>
+                    <div class="spec-grid mb-3">
+                        <div><input class="form-check-input" type="checkbox" id="use_Id" checked></div>
+                        <div class="fw-bold">Id</div>
+                        <div><input type="text" class="form-control" id="min_Id" value="1E-6"></div>
+                        <div><input type="text" class="form-control target-input" id="target_Id" value="1E-5"></div>
+                        <div><input type="text" class="form-control" id="max_Id" value="1E-4"></div>
+                    </div>
+                    <div class="spec-grid mb-3">
+                        <div><input class="form-check-input" type="checkbox" id="use_SS" checked></div>
+                        <div class="fw-bold">SS</div>
+                        <div><input type="number" step="any" class="form-control" id="min_SS" value="60"></div>
+                        <div><input type="number" step="any" class="form-control target-input" id="target_SS" value="70"></div>
+                        <div><input type="number" step="any" class="form-control" id="max_SS" value="100"></div>
+                    </div>
+                    <div class="spec-grid mb-4">
+                        <div><input class="form-check-input" type="checkbox" id="use_gm" checked></div>
+                        <div class="fw-bold">gm</div>
+                        <div><input type="text" class="form-control" id="min_gm" value="1E-5"></div>
+                        <div><input type="text" class="form-control target-input" id="target_gm" value="1E-4"></div>
+                        <div><input type="text" class="form-control" id="max_gm" value="1E-3"></div>
+                    </div>
+
+                    <button type="button" class="btn btn-primary w-100" id="searchBtn">최적 파라미터 탐색 시작 &rarr;</button>
+                    <button type="button" class="btn w-100 btn-outline-analysis" id="goToAnalysisBtn" onclick="window.location.href='/analysis?material=' + document.querySelector('input[name=\'oxideOption\']:checked').value">Analysis Detail &rarr;</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- 오른쪽: Optimization Result -->
+        <div class="col-lg-8">
+            <div class="custom-card">
+                <div class="section-title">Optimization Result <span id="timeCost" class="ms-3 fs-6 fw-normal text-muted"></span></div>
+                
+                <div id="emptyResult" class="text-center text-muted py-5 mt-5">
+                    왼쪽 폼에서 스펙을 입력하고 <strong>탐색 시작</strong>을 눌러주세요.
+                </div>
+
+                <div id="resultContainer" style="display: none;">
+                    <!-- TOP 1 -->
+                    <div class="top1-card">
+                        <div class="top1-badge">
+                            <div class="fs-4 fw-bold">TOP 1</div>
+                            <div style="font-size: 11px;">Best Candidate</div>
+                        </div>
+                        <div class="d-flex w-100 bg-white">
+                            <div class="param-box"><div class="param-title">Lg</div><div class="param-val" id="res1_lg">-</div><div class="param-unit">μm</div></div>
+                            <div class="param-box"><div class="param-title">LDD Dose</div><div class="param-val" id="res1_ldd_d">-</div><div class="param-unit">cm⁻²</div></div>
+                            <div class="param-box"><div class="param-title">LDD Energy</div><div class="param-val" id="res1_ldd_e">-</div><div class="param-unit">keV</div></div>
+                            <div class="param-box"><div class="param-title">SD Dose</div><div class="param-val" id="res1_sd_d">-</div><div class="param-unit">cm⁻²</div></div>
+                            <div class="param-box"><div class="param-title">SD Energy</div><div class="param-val" id="res1_sd_e">-</div><div class="param-unit">keV</div></div>
+                        </div>
+                    </div>
+
+                    <!-- Target vs Prediction -->
+                    <div class="tvp-card">
+                        <h6 class="fw-bold mb-3">Target vs Prediction</h6>
+                        <table class="tvp-table">
+                            <thead>
+                                <tr>
+                                    <th width="15%">Metric</th><th width="20%">Target</th><th width="20%">Predicted</th><th width="15%">Δ</th><th width="30%">Visual (Mock)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tvpBody"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- TOP 2 -->
+                    <div class="top-sub-card" id="top2_card">
+                        <div class="top-sub-badge">TOP 2</div>
+                        <div class="d-flex w-100">
+                            <div class="top-sub-param-box"><div class="param-title">Lg</div><div class="top-sub-val" id="res2_lg">-</div></div>
+                            <div class="top-sub-param-box"><div class="param-title">LDD Dose</div><div class="top-sub-val" id="res2_ldd_d">-</div></div>
+                            <div class="top-sub-param-box"><div class="param-title">LDD Energy</div><div class="top-sub-val" id="res2_ldd_e">-</div></div>
+                            <div class="top-sub-param-box"><div class="param-title">SD Dose</div><div class="top-sub-val" id="res2_sd_d">-</div></div>
+                            <div class="top-sub-param-box"><div class="param-title">SD Energy</div><div class="top-sub-val" id="res2_sd_e">-</div></div>
+                        </div>
+                    </div>
+
+                    <!-- TOP 3 -->
+                    <div class="top-sub-card" id="top3_card">
+                        <div class="top-sub-badge">TOP 3</div>
+                        <div class="d-flex w-100">
+                            <div class="top-sub-param-box"><div class="param-title">Lg</div><div class="top-sub-val" id="res3_lg">-</div></div>
+                            <div class="top-sub-param-box"><div class="param-title">LDD Dose</div><div class="top-sub-val" id="res3_ldd_d">-</div></div>
+                            <div class="top-sub-param-box"><div class="param-title">LDD Energy</div><div class="top-sub-val" id="res3_ldd_e">-</div></div>
+                            <div class="top-sub-param-box"><div class="param-title">SD Dose</div><div class="top-sub-val" id="res3_sd_d">-</div></div>
+                            <div class="top-sub-param-box"><div class="param-title">SD Energy</div><div class="top-sub-val" id="res3_sd_e">-</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function formatSciStr(val) {
+    if(typeof val === 'string' && val.includes('e')) {
+        let parts = val.split('e');
+        let coeff = parseFloat(parts[0]).toFixed(2);
+        let exp = parseInt(parts[1]);
+        const superScript = {'-': '⁻', '0':'⁰', '1':'¹', '2':'²', '3':'³', '4':'⁴', '5':'⁵', '6':'⁶', '7':'⁷', '8':'⁸', '9':'⁹'};
+        let expStr = exp.toString().split('').map(c => superScript[c] || c).join('');
+        return `${coeff}×10${expStr}`;
+    }
+    return val;
+}
+
+document.getElementById('searchBtn').addEventListener('click', async function() {
+    const btn = this;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span> 탐색 중...`;
+    
+    // 유저 입력 스펙 및 선택한 Oxide 물질 수집
+    let userSpecs = {};
+    const selectedOxide = document.querySelector('input[name="oxideOption"]:checked').value;
+    userSpecs['oxide_material'] = selectedOxide;
+
+    const targets = ["Vth", "Id", "SS", "gm"];
+    targets.forEach(t => {
+        if(document.getElementById(`use_${t}`).checked) {
+            userSpecs[t] = {
+                "min": parseFloat(document.getElementById(`min_${t}`).value),
+                "max": parseFloat(document.getElementById(`max_${t}`).value),
+                "target": parseFloat(document.getElementById(`target_${t}`).value)
+            };
+        }
+    });
+
+    try {
+        const response = await fetch('/search', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(userSpecs)
+        });
+        
+        const resData = await response.json();
+        document.getElementById('emptyResult').style.display = 'none';
+        
+        if(resData.status === 'success') {
+            document.getElementById('resultContainer').style.display = 'block';
+            document.getElementById('timeCost').innerText = `(Search time: ${resData.time}s)`;
+            const results = resData.data;
+            
+            for(let i=0; i<Math.min(3, results.length); i++) {
+                let item = results[i];
+                let p = item.params;
+                
+                document.getElementById(`res${i+1}_lg`).innerText = p[0].toFixed(4);
+                document.getElementById(`res${i+1}_ldd_d`).innerText = formatSciStr(p[1].toExponential(2));
+                document.getElementById(`res${i+1}_ldd_e`).innerText = p[2].toFixed(2);
+                document.getElementById(`res${i+1}_sd_d`).innerText = formatSciStr(p[3].toExponential(2));
+                document.getElementById(`res${i+1}_sd_e`).innerText = p[4].toFixed(2);
+                
+                if(i === 0) {
+                    let tvpHTML = "";
+                    targets.forEach(t => {
+                        if(userSpecs[t]) {
+                            let targetVal = userSpecs[t].target;
+                            let predVal = parseFloat(item[t.toLowerCase()]); 
+                            let delta = ((predVal - targetVal) / targetVal) * 100;
+                            let deltaClass = delta > 0 ? "delta-pos" : "delta-neg";
+                            let deltaSign = delta > 0 ? "+" : "";
+                            let mockSlider = `<div style="position:relative; width:100px; height:2px; background:#D1D5DB; margin-top:10px;">
+                                <div style="position:absolute; top:-4px; left:50%; width:1px; height:10px; background:#000;"></div>
+                                <div style="position:absolute; top:-5px; left:${Math.min(Math.max(50 + (delta/2), 0), 100)}%; width:12px; height:12px; background:#2563EB; border-radius:50%;"></div>
+                            </div>`;
+
+                            let dispTarget = (t === 'Id' || t === 'gm') ? formatSciStr(targetVal.toExponential(2)) : targetVal.toFixed(3);
+                            let dispPred = (t === 'Id' || t === 'gm') ? formatSciStr(predVal.toExponential(2)) : predVal.toFixed(3);
+
+                            tvpHTML += `<tr><td>${t}</td><td>${dispTarget}</td><td>${dispPred}</td><td class="${deltaClass}">${deltaSign}${delta.toFixed(1)}%</td><td>${mockSlider}</td></tr>`;
+                        }
+                    });
+                    document.getElementById('tvpBody').innerHTML = tvpHTML;
+                }
+            }
+            document.getElementById('top2_card').style.display = results.length > 1 ? 'flex' : 'none';
+            document.getElementById('top3_card').style.display = results.length > 2 ? 'flex' : 'none';
+        } else {
+            document.getElementById('resultContainer').style.display = 'none';
+            document.getElementById('emptyResult').style.display = 'block';
+            document.getElementById('emptyResult').innerHTML = `<span class="text-danger fw-bold fs-5">${resData.message}</span>`;
+        }
+    } catch (err) {
+        alert("서버 통신 중 오류가 발생했습니다.");
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = `최적 파라미터 탐색 시작 &rarr;`;
+    }
+});
+</script>
+</body>
+</html>
