@@ -90,3 +90,4 @@ for rank in range(3):
     print(f"Top {rank+1}")
     print(f"recommend var param : {np.round(best_inputs[rank], 4)}")
     print(f"Predict Result (Vth, Id, SS, gm): {np.round(best_outputs[rank], 4)}\n")
+
