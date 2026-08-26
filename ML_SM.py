@@ -1,166 +1,447 @@
+"""Short/long-channel TCAD surrogate-model baseline and evaluation.
+
+This module intentionally does not touch the Flask UI.  It reads the two sheets
+from the integrated workbook, trains independent model bundles for Short and
+Long devices, and reports validation metrics before the models are wired into
+the application.
+"""
+
+from __future__ import annotations
+
+import argparse
+from dataclasses import dataclass
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import shap
-from sklearn.ensemble import RandomForestRegressor
-
-# 1. 데이터 불러오기 및 확인
-df = pd.read_csv("simulation_data.csv")
-
-print("=== 실제 CSV 데이터 범위 확인 ===")
-print(f"Vth 범위: {df['Vth'].min():.4f} ~ {df['Vth'].max():.4f}")
-print(f"Id 범위: {df['Id'].min():.4e} ~ {df['Id'].max():.4e}")
-print(f"SS 범위: {df['SS'].min():.4f} ~ {df['SS'].max():.4f}")
-print(f"gm 범위: {df['gm'].min():.4e} ~ {df['gm'].max():.4e}")
-print("===============================\n")
-
-input_features = ["Lg", "LDD_Dose", "LDD_Energy", "SD_Dose", "SD_Energy"]
-output_targets = ["Vth", "Id", "SS", "gm"]
-
-X_train = df[input_features].values
-Y_train = df[output_targets].values
-
-# 2. 모델 학습
-model = RandomForestRegressor(n_estimators=100, random_state=42)
-model.fit(X_train, Y_train)
-
-# =====================================================================
-# 3. 추가된 부분: SHAP (설명 가능한 AI) 2x2 대시보드 시각화
-# =====================================================================
-print("=== 🧠 SHAP 분석: 인공지능 모델의 소자 물리 해석 중 ===")
-explainer = shap.TreeExplainer(model)
-
-X_sample = shap.sample(X_train, 500) if len(X_train) > 500 else X_train
-shap_values = explainer.shap_values(X_sample)
-
-target_names = ["Vth", "Id", "SS", "gm"]
-
-# 2x2 그리드 창 생성 (가로 16, 세로 12 사이즈 넉넉하게 지정)
-fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-axes = axes.flatten()  # 2차원 배열을 1차원으로 펴서 반복문 돌리기 쉽게 만듭니다.
-
-for i, target in enumerate(target_names):
-    # 1. 터미널 출력용 % 수치 계산
-    mean_abs_shap = np.abs(shap_values[:, :, i]).mean(axis=0)
-    weights_pct = (mean_abs_shap / mean_abs_shap.sum()) * 100
-
-    # 2. 기존 변수명 옆에 % 수치를 합성 (예: "Lg (45.8%)")
-    feature_names_with_pct = [
-        f"{name} ({pct:.1f}%)" for name, pct in zip(input_features, weights_pct)
-    ]
-
-    # 3. 2x2 그리드 중 현재 위치(axes[i])에 그래프 그리기
-    plt.sca(axes[i])
-    shap.summary_plot(
-        shap_values[:, :, i],
-        X_sample,
-        feature_names=feature_names_with_pct,
-        show=False,
-        plot_size=None,  # 핵심: 2x2 레이아웃이 깨지지 않도록 SHAP의 자동 크기 조절을 차단
-    )
-    axes[i].set_title(f"SHAP Importance for {target}", fontsize=14, pad=15)
-
-# 그래프 간의 간격을 자동으로 맞춰줌
-plt.tight_layout()
-print(
-    "📊 4개의 타겟에 대한 SHAP 분석 결과를 2x2 창에 모두 띄웁니다. (창을 닫으면 최적 파라미터 탐색이 시작됩니다)"
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.metrics import (
+    accuracy_score,
+    balanced_accuracy_score,
+    classification_report,
+    confusion_matrix,
+    mean_absolute_error,
+    mean_squared_error,
+    r2_score,
+    roc_auc_score,
 )
-plt.show()
-print("=========================================================\n")
+from sklearn.model_selection import train_test_split
 
 
-# 4. 무작위 탐색(Random Search)을 통한 최적 파라미터 도출
-def calcul_parameters(
-    model, param_bounds, target_specs, num_candidates=500000, top_k=3
-):
-    candidates = np.zeros((num_candidates, 5))
-    for i in range(5):
-        min_val, max_val = param_bounds[i]
-        candidates[:, i] = np.random.uniform(min_val, max_val, num_candidates)
-
-    predictions = model.predict(candidates)
-
-    scores = np.zeros(num_candidates)
-    valid_mask = np.ones(num_candidates, dtype=bool)
-
-    for i, target_name in enumerate(["Vth", "Id", "SS", "gm"]):
-        if target_name in target_specs:
-            spec = target_specs[target_name]
-            pred_vals = predictions[:, i]
-
-            if "min" in spec:
-                valid_mask &= pred_vals >= spec["min"]
-            if "max" in spec:
-                valid_mask &= pred_vals <= spec["max"]
-
-            if "target" in spec:
-                scores += ((pred_vals - spec["target"]) / spec["target"]) ** 2
-
-    valid_candidates = candidates[valid_mask]
-    valid_scores = scores[valid_mask]
-    valid_predictions = predictions[valid_mask]
-
-    if len(valid_candidates) == 0:
-        return None
-
-    best_indices = np.argsort(valid_scores)[:top_k]
-
-    return valid_candidates[best_indices], valid_predictions[best_indices]
+RANDOM_STATE = 42
+CANDIDATE_SEED = 20260823
+TEST_SIZE = 0.20
+N_TREES = 300
+LOW_DRAIN_BIAS = 0.05
+HIGH_DRAIN_BIAS = 1.0
+DEFAULT_WORKBOOK = (
+    Path(__file__).resolve().parent
+    / "data"
+    / "training"
+    / "tcad_training_master.xlsx"
+)
 
 
-# 사용자 파라미터 탐색 범위 설정
-parameter_bounds = [
-    (0.05, 1),  # Lg (gate Length)
-    (1e11, 1e15),  # LDD Dose
-    (10, 70),  # LDD Energy
-    (1e14, 1e18),  # SD Dose
-    (10, 40),  # SD Energy
-]
+@dataclass(frozen=True)
+class DeviceConfig:
+    sheet_name: str
+    input_features: tuple[str, ...]
+    threshold_column: str
 
-# 타겟 스펙 설정
-user_specs = {
-    "Vth": {
-        "min": 0.6,
-        "max": 1.0,
-        "target": 0.8,
-    },
-    # "Id": {
-    #     "min": 1e-6,
-    #     "max": 1e-4,
-    #     "target": 1e-5,
-    # },
-    "SS": {
-        "min": 60,
-        "max": 100,
-        "target": 70,
-    },
-    # "gm": {
-    #     "min": 1e-5,
-    #     "max": 1e-3,
-    #     "target": 1e-4,
-    # },
+
+DEVICE_CONFIGS = {
+    "Short": DeviceConfig(
+        sheet_name="Short",
+        input_features=(
+            "Lg",
+            "LDD_Dose",
+            "LDD_Energy",
+            "SD_Dose",
+            "SD_Energy",
+            "anneal",
+            "halo_dose",
+            "halo_energy",
+        ),
+        threshold_column="Vth",
+    ),
+    "Long": DeviceConfig(
+        sheet_name="Long",
+        input_features=(
+            "Lg",
+            "LDD_Dose",
+            "LDD_Energy",
+            "SD_Dose",
+            "SD_Energy",
+        ),
+        threshold_column="Vtgm",
+    ),
 }
 
-print("=== 🔍 최적 파라미터 조합 탐색 시작 ===")
-result = calcul_parameters(model, parameter_bounds, user_specs)
+MODEL_TARGETS = ("Vth", "SS", "Ion", "Ioff")
+REQUIRED_BIASES = (LOW_DRAIN_BIAS, HIGH_DRAIN_BIAS)
+TARGET_BIASES = {
+    "Vth": LOW_DRAIN_BIAS,
+    "SS": LOW_DRAIN_BIAS,
+    "Ion": HIGH_DRAIN_BIAS,
+    "Ioff": HIGH_DRAIN_BIAS,
+}
 
-<<<<<<< HEAD
-for rank in range(3):
-    print(f"Top {rank+1}")
-    print(f"recommend var param : {np.round(best_inputs[rank], 4)}")
-    print(f"Predict Result (Vth, Id, SS, gm): {np.round(best_outputs[rank], 4)}\n")
 
-=======
-if result is None:
-    print("현재 설정된 조건을 만족하는 후보를 찾지 못했습니다.")
-    print("이유 1: user_specs 조건이 아직 너무 빡빡함")
-    print("이유 2: 학습 데이터(CSV)에 해당 결과값을 낼 수 있는 데이터가 아예 없음")
-else:
-    best_inputs, best_outputs = result
+def candidate_seed_for_gate_length(
+    gate_length: float, base_seed: int = CANDIDATE_SEED
+) -> int:
+    """Return the reproducible candidate-pool seed used by UI and batch runs."""
 
-    num_results = len(best_inputs)
-    for rank in range(num_results):
-        print(f"Top {rank+1}")
-        print(f"recommend var param : {np.round(best_inputs[rank], 4)}")
-        print(f"Predict Result (Vth, Id, SS, gm): {np.round(best_outputs[rank], 4)}\n")
->>>>>>> ace06b9deb56cbacec765a2351d9b44e2ac9c73d
+    return int(base_seed) + int(round(float(gate_length) * 1_000_000))
+
+
+def load_device_sheet(workbook_path: Path, config: DeviceConfig) -> pd.DataFrame:
+    """Load and normalize one Excel sheet.
+
+    The workbook has two blank leading rows and one blank leading column, so the
+    real header is Excel row 3.  Numeric coercion also converts '-' cells used
+    for failed extractions into NaN.
+    """
+
+    df = pd.read_excel(workbook_path, sheet_name=config.sheet_name, header=2)
+    df = df.dropna(axis=1, how="all").dropna(axis=0, how="all")
+
+    if config.threshold_column != "Vth":
+        df = df.rename(columns={config.threshold_column: "Vth"})
+
+    required_columns = [
+        *config.input_features,
+        "Vd",
+        *MODEL_TARGETS,
+    ]
+    missing_columns = sorted(set(required_columns) - set(df.columns))
+    if missing_columns:
+        raise ValueError(
+            f"{config.sheet_name} sheet is missing columns: {missing_columns}"
+        )
+
+    numeric_columns = list(required_columns)
+    if "Valid" in df.columns:
+        numeric_columns.append("Valid")
+
+    for column in numeric_columns:
+        df[column] = pd.to_numeric(df[column], errors="coerce")
+
+    if df[list(config.input_features) + ["Vd"]].isna().any().any():
+        raise ValueError(
+            f"{config.sheet_name} contains missing/non-numeric process inputs."
+        )
+
+    return df
+
+
+def build_recipe_classification_table(
+    df: pd.DataFrame, config: DeviceConfig
+) -> pd.DataFrame:
+    """Collapse two Vd rows into one recipe and derive a conservative Label.
+
+    If the sheet contains an explicit Valid flag, it is authoritative.  This is
+    used by the six-CSV Short dataset.  Older sheets without Valid retain the
+    legacy rule requiring all four outputs at both drain biases.
+    """
+
+    inputs = list(config.input_features)
+    work = df[df["Vd"].isin(REQUIRED_BIASES)].copy()
+
+    if "Valid" in work.columns:
+        recipe_table = (
+            work.groupby(inputs, as_index=False, dropna=False)
+            .agg(
+                bias_count=("Vd", "nunique"),
+                valid_value_count=("Valid", "count"),
+                valid_min=("Valid", "min"),
+            )
+            .copy()
+        )
+        recipe_table["Label"] = (
+            recipe_table["bias_count"].eq(len(REQUIRED_BIASES))
+            & recipe_table["valid_value_count"].eq(len(REQUIRED_BIASES))
+            & recipe_table["valid_min"].eq(1)
+        ).astype(int)
+        return recipe_table
+
+    work["row_valid"] = work[list(MODEL_TARGETS)].notna().all(axis=1)
+
+    recipe_table = (
+        work.groupby(inputs, as_index=False, dropna=False)
+        .agg(
+            bias_count=("Vd", "nunique"),
+            valid_bias_count=("row_valid", "sum"),
+        )
+        .copy()
+    )
+    recipe_table["Label"] = (
+        recipe_table["bias_count"].eq(len(REQUIRED_BIASES))
+        & recipe_table["valid_bias_count"].eq(len(REQUIRED_BIASES))
+    ).astype(int)
+    return recipe_table
+
+
+def build_regression_table(
+    df: pd.DataFrame, config: DeviceConfig
+) -> pd.DataFrame:
+    """Build one physics-oriented output row per process recipe.
+
+    Vth and SS use the low-drain-voltage transfer curve, while Ion and Ioff use
+    the high-drain-voltage curve.  This keeps the UI outputs explicit and avoids
+    comparing low-Vd surrogate currents with high-Vd TCAD validation results.
+    """
+
+    inputs = list(config.input_features)
+    low_columns = [*inputs, "Vth", "SS"]
+    high_columns = [*inputs, "Ion", "Ioff"]
+    if "Valid" in df.columns:
+        low_columns.append("Valid")
+        high_columns.append("Valid")
+
+    low_bias = df[np.isclose(df["Vd"], LOW_DRAIN_BIAS)][low_columns].copy()
+    high_bias = df[np.isclose(df["Vd"], HIGH_DRAIN_BIAS)][high_columns].copy()
+
+    table = low_bias.merge(
+        high_bias,
+        on=inputs,
+        how="inner",
+        validate="one_to_one",
+        suffixes=("_low", "_high"),
+    )
+    if "Valid_low" in table.columns:
+        table = table[
+            table["Valid_low"].eq(1) & table["Valid_high"].eq(1)
+        ].copy()
+    table = table.dropna(subset=list(MODEL_TARGETS))
+    table = table[
+        (table["Vth"] > 0)
+        & (table["SS"] > 0)
+        & (table["Ion"] > 0)
+        & table["Ioff"].notna()
+    ].copy()
+    return table
+
+
+def train_and_evaluate_classifier(
+    recipe_table: pd.DataFrame, config: DeviceConfig
+) -> RandomForestClassifier:
+    features = list(config.input_features)
+    X = recipe_table[features]
+    y = recipe_table["Label"]
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X,
+        y,
+        test_size=TEST_SIZE,
+        random_state=RANDOM_STATE,
+        stratify=y,
+    )
+    model = RandomForestClassifier(
+        n_estimators=N_TREES,
+        class_weight="balanced",
+        n_jobs=-1,
+        random_state=RANDOM_STATE,
+    )
+    model.fit(X_train, y_train)
+
+    prediction = model.predict(X_test)
+    valid_probability = model.predict_proba(X_test)[:, 1]
+    matrix = confusion_matrix(y_test, prediction, labels=[0, 1])
+
+    print("\n[Classifier: recipe valid/invalid]")
+    print(f"recipes={len(recipe_table):,}, valid={int(y.sum()):,}, invalid={int((1-y).sum()):,}")
+    print(f"accuracy={accuracy_score(y_test, prediction):.4f}")
+    print(f"balanced_accuracy={balanced_accuracy_score(y_test, prediction):.4f}")
+    print(f"roc_auc={roc_auc_score(y_test, valid_probability):.4f}")
+    print("confusion_matrix rows=actual[invalid, valid], cols=predicted[invalid, valid]")
+    print(matrix)
+    print(classification_report(y_test, prediction, target_names=["invalid", "valid"], digits=4))
+
+    # Refit the deployable model on all available recipes after evaluation.
+    model.fit(X, y)
+    return model
+
+
+def _transform_target(target: str, values: np.ndarray) -> np.ndarray:
+    values = np.asarray(values, dtype=float)
+    if target in {"Ion", "Ioff"}:
+        # Ioff contains a few tiny negative numerical values in the Long sheet.
+        # For this baseline, current magnitude is modeled in log10 space.
+        return np.log10(np.clip(np.abs(values), 1e-30, None))
+    if target == "SS":
+        return np.log10(np.clip(values, 1e-30, None))
+    return values
+
+
+def _inverse_target(target: str, values: np.ndarray) -> np.ndarray:
+    if target in {"SS", "Ion", "Ioff"}:
+        return np.power(10.0, values)
+    return values
+
+
+def _regression_metrics(
+    target: str, actual: np.ndarray, prediction: np.ndarray
+) -> dict[str, float]:
+    metrics = {
+        "r2": r2_score(actual, prediction),
+        "mae": mean_absolute_error(actual, prediction),
+        "rmse": np.sqrt(mean_squared_error(actual, prediction)),
+    }
+    if target in {"SS", "Ion", "Ioff"}:
+        actual_log = _transform_target(target, actual)
+        prediction_log = _transform_target(target, prediction)
+        metrics["log_rmse_decades"] = np.sqrt(
+            mean_squared_error(actual_log, prediction_log)
+        )
+    return metrics
+
+
+def train_and_evaluate_regressors(
+    regression_table: pd.DataFrame, config: DeviceConfig
+) -> dict[str, RandomForestRegressor]:
+    features = list(config.input_features)
+    train_index, test_index = train_test_split(
+        np.arange(len(regression_table)),
+        test_size=TEST_SIZE,
+        random_state=RANDOM_STATE,
+    )
+
+    X = regression_table[features].reset_index(drop=True)
+    print(
+        "\n[Regressors: Vth/SS @ Vd="
+        f"{LOW_DRAIN_BIAS:g} V; Ion/Ioff @ Vd={HIGH_DRAIN_BIAS:g} V; "
+        f"complete recipes={len(X):,}]"
+    )
+    models: dict[str, RandomForestRegressor] = {}
+    test_predictions: dict[str, np.ndarray] = {}
+
+    for target in MODEL_TARGETS:
+        y_raw = regression_table[target].to_numpy(dtype=float)
+        y_model = _transform_target(target, y_raw)
+
+        model = RandomForestRegressor(
+            n_estimators=N_TREES,
+            n_jobs=-1,
+            random_state=RANDOM_STATE,
+        )
+        model.fit(X.iloc[train_index], y_model[train_index])
+        prediction_model = model.predict(X.iloc[test_index])
+        prediction_raw = _inverse_target(target, prediction_model)
+        actual_raw = np.abs(y_raw[test_index]) if target == "Ioff" else y_raw[test_index]
+        metrics = _regression_metrics(target, actual_raw, prediction_raw)
+        test_predictions[target] = prediction_raw
+
+        metric_text = " ".join(f"{name}={value:.5g}" for name, value in metrics.items())
+        print(f"{target:>4}: {metric_text}")
+
+        # Refit the deployable model on all valid rows after evaluation.
+        model.fit(X, y_model)
+        models[target] = model
+
+    actual_onoff = (
+        np.abs(regression_table["Ion"].to_numpy(dtype=float)[test_index])
+        / np.clip(
+            np.abs(regression_table["Ioff"].to_numpy(dtype=float)[test_index]),
+            1e-30,
+            None,
+        )
+    )
+    predicted_onoff = test_predictions["Ion"] / np.clip(
+        test_predictions["Ioff"], 1e-30, None
+    )
+    actual_log = np.log10(np.clip(actual_onoff, 1e-30, None))
+    predicted_log = np.log10(np.clip(predicted_onoff, 1e-30, None))
+    print(
+        "OnOff (derived): "
+        f"log_r2={r2_score(actual_log, predicted_log):.5g} "
+        f"log_mae_decades={mean_absolute_error(actual_log, predicted_log):.5g} "
+        "log_rmse_decades="
+        f"{np.sqrt(mean_squared_error(actual_log, predicted_log)):.5g}"
+    )
+
+    return models
+
+
+def evaluate_unseen_gate_lengths(
+    regression_table: pd.DataFrame, config: DeviceConfig
+) -> None:
+    """Measure extrapolation when one complete Lg choice is absent in training."""
+
+    features = list(config.input_features)
+    print("\n[Leave-one-Lg-out: Vth and SS]")
+    for held_lg in sorted(regression_table["Lg"].unique()):
+        train = regression_table[~np.isclose(regression_table["Lg"], held_lg)]
+        test = regression_table[np.isclose(regression_table["Lg"], held_lg)]
+        result_parts = [f"held_Lg={held_lg:g}", f"test_rows={len(test)}"]
+
+        for target in ("Vth", "SS"):
+            model = RandomForestRegressor(
+                n_estimators=N_TREES,
+                n_jobs=-1,
+                random_state=RANDOM_STATE,
+            )
+            y_train = _transform_target(target, train[target].to_numpy(dtype=float))
+            model.fit(train[features], y_train)
+            prediction = _inverse_target(target, model.predict(test[features]))
+            actual = test[target].to_numpy(dtype=float)
+            result_parts.append(f"{target}_r2={r2_score(actual, prediction):.4f}")
+            result_parts.append(
+                f"{target}_rmse={np.sqrt(mean_squared_error(actual, prediction)):.4g}"
+            )
+
+        print(" | ".join(result_parts))
+
+
+def train_device_bundle(
+    workbook_path: Path, config: DeviceConfig
+) -> dict[str, object]:
+    print("\n" + "=" * 72)
+    print(f"{config.sheet_name.upper()}-CHANNEL MODEL")
+    print(f"features={list(config.input_features)}")
+
+    df = load_device_sheet(workbook_path, config)
+    recipe_table = build_recipe_classification_table(df, config)
+    regression_table = build_regression_table(df, config)
+
+    classifier = train_and_evaluate_classifier(recipe_table, config)
+    regressors = train_and_evaluate_regressors(regression_table, config)
+    evaluate_unseen_gate_lengths(regression_table, config)
+
+    return {
+        "config": config,
+        "classifier": classifier,
+        "regressors": regressors,
+        "gate_length_choices": sorted(regression_table["Lg"].unique().tolist()),
+    }
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--workbook",
+        type=Path,
+        default=DEFAULT_WORKBOOK,
+        help=f"Integrated Excel dataset (default: {DEFAULT_WORKBOOK})",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    if not args.workbook.exists():
+        raise FileNotFoundError(f"Workbook not found: {args.workbook}")
+
+    bundles = {
+        name: train_device_bundle(args.workbook, config)
+        for name, config in DEVICE_CONFIGS.items()
+    }
+
+    print("\n" + "=" * 72)
+    print("TRAINED GATE-LENGTH CHOICES")
+    for name, bundle in bundles.items():
+        print(f"{name}: {bundle['gate_length_choices']}")
+
+
+if __name__ == "__main__":
+    main()

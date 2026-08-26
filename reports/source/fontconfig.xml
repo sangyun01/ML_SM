@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <dir>/Users/parksangheon/Downloads/2nd_code_file/reports/assets</dir>
+  <dir>/System/Library/Fonts</dir>
+  <dir>/System/Library/Fonts/Supplemental</dir>
+  <dir>/Library/Fonts</dir>
+  <dir>/Users/parksangheon/Library/Fonts</dir>
+  <cachedir>/private/tmp/tcad-fontconfig-cache</cachedir>
+</fontconfig>

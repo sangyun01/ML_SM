@@ -3,298 +3,277 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI-Based TCAD Parameter Optimizer</title>
-    <!-- Bootstrap 5 -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Pretendard 폰트 -->
-    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
-    
+    <title>TCAD Process Recipe Optimizer</title>
     <style>
         :root {
-            --primary-blue: #2563EB; --primary-orange: #F97316;
-            --bg-color: #F4F7F9; --card-border: #E5E7EB;
-            --text-dark: #1F2937; --text-muted: #6B7280;
+            --blue: #2563eb;
+            --blue-soft: #eff6ff;
+            --orange: #f97316;
+            --green: #059669;
+            --bg: #f4f7f9;
+            --card: #ffffff;
+            --border: #e5e7eb;
+            --text: #1f2937;
+            --muted: #6b7280;
         }
-        
-        body { 
-            font-family: 'Pretendard', sans-serif; 
-            font-weight: 500; 
-            background-color: var(--bg-color); 
-            color: var(--text-dark); 
-            padding-bottom: 50px;
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
-        
-        .title-header { font-size: 28px; font-weight: 700; color: #111827; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #E5E7EB; }
-        
-        .custom-card { background: #fff; border-radius: 12px; border: 1px solid var(--card-border); box-shadow: 0 4px 20px rgba(0,0,0,0.02); padding: 24px; height: 100%; }
-        .section-title { font-size: 20px; font-weight: 700; display: flex; align-items: center; margin-bottom: 15px; }
-        .section-title::before { content: ''; display: inline-block; width: 14px; height: 14px; background-color: var(--primary-blue); border-radius: 4px; margin-right: 10px; }
-        
-        /* HKMG 옵션 박스 스타일 */
-        .option-box { background-color: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px; padding: 15px 20px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; }
-        
-        .spec-grid { display: grid; grid-template-columns: 0.5fr 1fr 1.5fr 1.5fr 1.5fr; gap: 10px; align-items: center; text-align: center; margin-bottom: 15px; }
-        .spec-header { color: var(--text-muted); font-size: 13px; font-weight: 600; margin-bottom: 15px; border-bottom: 1px solid #E5E7EB; padding-bottom: 10px; }
-        .form-control { text-align: center; border-radius: 6px; border: 1px solid #D1D5DB; font-size: 14px; padding: 6px; }
-        .form-control.target-input { border: 1px solid var(--primary-blue); color: var(--primary-blue); font-weight: 600; background-color: #EFF6FF; }
-        
-        .btn-primary { background-color: var(--primary-blue); border: none; border-radius: 8px; font-weight: 600; padding: 12px; margin-top: 20px; }
-        .btn-outline-analysis { border: 1px solid var(--primary-blue); color: var(--primary-blue); background-color: white; border-radius: 8px; font-weight: 600; padding: 12px; margin-top: 10px; transition: all 0.2s; }
-        .btn-outline-analysis:hover { background-color: #EFF6FF; }
-        
-        .top1-card { display: flex; border: 2px solid var(--primary-orange); border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
-        .top1-badge { background: linear-gradient(135deg, #F97316, #EA580C); color: white; min-width: 130px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 15px; }
-        .param-box { flex: 1; text-align: center; border-right: 1px solid #E5E7EB; padding: 15px 5px; }
-        .param-box:last-child { border-right: none; }
-        .param-title { font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
-        .param-val { font-size: 18px; font-weight: 700; color: #111827; }
-        .param-unit { font-size: 11px; color: #9CA3AF; }
-        
-        .top-sub-card { display: flex; border: 1px solid #D1D5DB; border-radius: 8px; overflow: hidden; margin-bottom: 12px; background-color: #FAFAFA; }
-        .top-sub-badge { background-color: #F3F4F6; color: #4B5563; min-width: 100px; display: flex; justify-content: center; align-items: center; font-weight: 700; font-size: 16px; border-right: 1px solid #D1D5DB; }
-        .top-sub-param-box { flex: 1; text-align: center; border-right: 1px solid #E5E7EB; padding: 10px 5px; }
-        .top-sub-param-box:last-child { border-right: none; }
-        .top-sub-val { font-size: 13px; font-weight: 600; color: #111827; margin-top: 4px; }
-        
-        .tvp-card { border: 1px solid var(--primary-orange); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
-        .tvp-table { width: 100%; font-size: 13px; }
-        .tvp-table th { color: var(--text-muted); font-weight: 600; padding-bottom: 15px; border-bottom: 1px solid #E5E7EB; }
-        .tvp-table td { padding: 12px 0; border-bottom: 1px solid #F3F4F6; vertical-align: middle; }
-        .tvp-table td:first-child { font-weight: 600; color: #374151; }
-        .delta-pos { color: var(--primary-orange); font-weight: 600; }
-        .delta-neg { color: var(--primary-blue); font-weight: 600; }
+        .page { max-width: 1440px; margin: 0 auto; padding: 36px 28px 60px; }
+        .header { border-bottom: 1px solid var(--border); padding-bottom: 20px; margin-bottom: 26px; }
+        .header h1 { margin: 0 0 7px; font-size: 28px; }
+        .header p { margin: 0; color: var(--muted); font-size: 14px; }
+        .layout { display: grid; grid-template-columns: minmax(360px, 430px) 1fr; gap: 22px; align-items: start; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 22px; }
+        .section-title { margin: 0 0 15px; font-size: 19px; }
+        .section-title::before { content: ""; display: inline-block; width: 11px; height: 11px; background: var(--blue); border-radius: 3px; margin-right: 9px; }
+        .option { background: #f9fafb; border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+        .option-label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 8px; font-weight: 650; }
+        .radio-row { display: flex; gap: 8px; }
+        .radio-row input { position: absolute; opacity: 0; pointer-events: none; }
+        .radio-row label { flex: 1; border: 1px solid #bfdbfe; border-radius: 8px; padding: 9px 12px; text-align: center; cursor: pointer; color: var(--blue); font-weight: 650; }
+        .radio-row input:checked + label { background: var(--blue); color: white; border-color: var(--blue); }
+        select, input[type="number"], input[type="text"] { width: 100%; border: 1px solid #d1d5db; border-radius: 7px; padding: 8px; background: white; color: var(--text); }
+        .feature-note { color: var(--muted); font-size: 12px; line-height: 1.55; margin-top: 8px; }
+        .spec-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .spec-table th { color: var(--muted); font-size: 11px; padding: 8px 4px; border-bottom: 1px solid var(--border); }
+        .spec-table td { padding: 7px 4px; text-align: center; }
+        .spec-table input[type="checkbox"] { width: 16px; height: 16px; }
+        .target-input { border-color: var(--blue) !important; color: var(--blue) !important; background: var(--blue-soft) !important; font-weight: 650; }
+        .actions { display: grid; gap: 9px; margin-top: 17px; }
+        button, .button-link { border: 0; border-radius: 9px; padding: 12px 14px; font-weight: 700; font-size: 14px; cursor: pointer; text-align: center; text-decoration: none; }
+        .primary { background: var(--blue); color: white; }
+        .secondary { background: white; color: var(--blue); border: 1px solid var(--blue); }
+        button:disabled { opacity: 0.65; cursor: wait; }
+        .empty { color: var(--muted); text-align: center; padding: 80px 20px; }
+        .status-line { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 16px; }
+        .status-line h2 { margin: 0; font-size: 19px; }
+        .status-line span { color: var(--muted); font-size: 12px; }
+        .result-card { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 14px; }
+        .result-card.top { border: 2px solid var(--orange); }
+        .result-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 15px; background: #f9fafb; border-bottom: 1px solid var(--border); }
+        .result-card.top .result-head { background: #fff7ed; }
+        .rank { font-weight: 800; }
+        .confidence { font-size: 12px; color: var(--green); }
+        .result-body { padding: 15px; }
+        .grid-title { font-size: 11px; color: var(--muted); margin-bottom: 8px; font-weight: 700; text-transform: uppercase; }
+        .value-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 8px; margin-bottom: 15px; }
+        .value { background: #f9fafb; border-radius: 8px; padding: 10px; min-width: 0; }
+        .value .label { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+        .value .number { font-weight: 750; font-size: 14px; overflow-wrap: anywhere; }
+        .prediction-grid .value { background: var(--blue-soft); }
+        .warning { color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; padding: 14px; border-radius: 9px; }
+        .method-note { margin-top: 15px; padding: 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 9px; font-size: 12px; color: #166534; line-height: 1.5; }
+        @media (max-width: 920px) {
+            .layout { grid-template-columns: 1fr; }
+            .page { padding: 24px 16px 50px; }
+        }
+        @media (max-width: 480px) {
+            .spec-table { font-size: 11px; }
+            .spec-table input { padding: 6px 3px; }
+            .card { padding: 16px; }
+        }
     </style>
 </head>
 <body>
+<main class="page">
+    <header class="header">
+        <h1>AI-Based TCAD Process Recipe Optimizer</h1>
+        <p>Short/Long 채널을 분리 학습하고, 검증된 Gate Length 선택값 안에서 공정조건을 추천합니다.</p>
+    </header>
 
-<div class="container-fluid" style="max-width: 1400px; padding: 40px;">
-    <div class="title-header">
-        AI-Based TCAD Parameter Optimizer
-    </div>
+    <div class="layout">
+        <section class="card" aria-labelledby="input-title">
+            <h2 class="section-title" id="input-title">목표 스펙 입력</h2>
 
-    <div class="row g-4">
-        
-        <!-- 왼쪽: 목표 스펙 입력 -->
-        <div class="col-lg-4">
-            <div class="custom-card">
-                <div class="section-title">목표 스펙 입력</div>
-                <p class="text-muted" style="font-size: 13px; margin-bottom: 20px;">조건을 적용할 항목의 체크박스를 선택하고 값을 입력하세요.</p>
-
-                <!-- HKMG 물질 선택 옵션 -->
-                <div class="option-box">
-                    <span class="fw-bold" style="font-size: 14px;">Oxide Material</span>
-                    <div class="btn-group" role="group">
-                        <input type="radio" class="btn-check" name="oxideOption" id="oxide_sio2" value="SiO2" autocomplete="off" checked>
-                        <label class="btn btn-outline-primary px-3 py-1" style="font-size: 13px;" for="oxide_sio2">SiO₂</label>
-
-                        <input type="radio" class="btn-check" name="oxideOption" id="oxide_hkmg" value="HKMG" autocomplete="off">
-                        <label class="btn btn-outline-primary px-3 py-1" style="font-size: 13px;" for="oxide_hkmg">HKMG</label>
-                    </div>
-                </div>
-
-                <div class="spec-grid spec-header">
-                    <div>적용</div><div>Metric</div><div>Min</div><div>Target</div><div>Max</div>
-                </div>
-
-                <form id="specForm">
-                    <div class="spec-grid mb-3">
-                        <div><input class="form-check-input" type="checkbox" id="use_Vth" checked></div>
-                        <div class="fw-bold">Vth</div>
-                        <div><input type="number" step="any" class="form-control" id="min_Vth" value="0.60"></div>
-                        <div><input type="number" step="any" class="form-control target-input" id="target_Vth" value="0.80"></div>
-                        <div><input type="number" step="any" class="form-control" id="max_Vth" value="1.00"></div>
-                    </div>
-                    <div class="spec-grid mb-3">
-                        <div><input class="form-check-input" type="checkbox" id="use_Id" checked></div>
-                        <div class="fw-bold">Id</div>
-                        <div><input type="text" class="form-control" id="min_Id" value="1E-6"></div>
-                        <div><input type="text" class="form-control target-input" id="target_Id" value="1E-5"></div>
-                        <div><input type="text" class="form-control" id="max_Id" value="1E-4"></div>
-                    </div>
-                    <div class="spec-grid mb-3">
-                        <div><input class="form-check-input" type="checkbox" id="use_SS" checked></div>
-                        <div class="fw-bold">SS</div>
-                        <div><input type="number" step="any" class="form-control" id="min_SS" value="60"></div>
-                        <div><input type="number" step="any" class="form-control target-input" id="target_SS" value="70"></div>
-                        <div><input type="number" step="any" class="form-control" id="max_SS" value="100"></div>
-                    </div>
-                    <div class="spec-grid mb-4">
-                        <div><input class="form-check-input" type="checkbox" id="use_gm" checked></div>
-                        <div class="fw-bold">gm</div>
-                        <div><input type="text" class="form-control" id="min_gm" value="1E-5"></div>
-                        <div><input type="text" class="form-control target-input" id="target_gm" value="1E-4"></div>
-                        <div><input type="text" class="form-control" id="max_gm" value="1E-3"></div>
-                    </div>
-
-                    <button type="button" class="btn btn-primary w-100" id="searchBtn">최적 파라미터 탐색 시작 &rarr;</button>
-                    <button type="button" class="btn w-100 btn-outline-analysis" id="goToAnalysisBtn" onclick="window.location.href='/analysis?material=' + document.querySelector('input[name=\'oxideOption\']:checked').value">Analysis Detail &rarr;</button>
-                </form>
-            </div>
-        </div>
-
-        <!-- 오른쪽: Optimization Result -->
-        <div class="col-lg-8">
-            <div class="custom-card">
-                <div class="section-title">Optimization Result <span id="timeCost" class="ms-3 fs-6 fw-normal text-muted"></span></div>
-                
-                <div id="emptyResult" class="text-center text-muted py-5 mt-5">
-                    왼쪽 폼에서 스펙을 입력하고 <strong>탐색 시작</strong>을 눌러주세요.
-                </div>
-
-                <div id="resultContainer" style="display: none;">
-                    <!-- TOP 1 -->
-                    <div class="top1-card">
-                        <div class="top1-badge">
-                            <div class="fs-4 fw-bold">TOP 1</div>
-                            <div style="font-size: 11px;">Best Candidate</div>
-                        </div>
-                        <div class="d-flex w-100 bg-white">
-                            <div class="param-box"><div class="param-title">Lg</div><div class="param-val" id="res1_lg">-</div><div class="param-unit">μm</div></div>
-                            <div class="param-box"><div class="param-title">LDD Dose</div><div class="param-val" id="res1_ldd_d">-</div><div class="param-unit">cm⁻²</div></div>
-                            <div class="param-box"><div class="param-title">LDD Energy</div><div class="param-val" id="res1_ldd_e">-</div><div class="param-unit">keV</div></div>
-                            <div class="param-box"><div class="param-title">SD Dose</div><div class="param-val" id="res1_sd_d">-</div><div class="param-unit">cm⁻²</div></div>
-                            <div class="param-box"><div class="param-title">SD Energy</div><div class="param-val" id="res1_sd_e">-</div><div class="param-unit">keV</div></div>
-                        </div>
-                    </div>
-
-                    <!-- Target vs Prediction -->
-                    <div class="tvp-card">
-                        <h6 class="fw-bold mb-3">Target vs Prediction</h6>
-                        <table class="tvp-table">
-                            <thead>
-                                <tr>
-                                    <th width="15%">Metric</th><th width="20%">Target</th><th width="20%">Predicted</th><th width="15%">Δ</th><th width="30%">Visual (Mock)</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tvpBody"></tbody>
-                        </table>
-                    </div>
-
-                    <!-- TOP 2 -->
-                    <div class="top-sub-card" id="top2_card">
-                        <div class="top-sub-badge">TOP 2</div>
-                        <div class="d-flex w-100">
-                            <div class="top-sub-param-box"><div class="param-title">Lg</div><div class="top-sub-val" id="res2_lg">-</div></div>
-                            <div class="top-sub-param-box"><div class="param-title">LDD Dose</div><div class="top-sub-val" id="res2_ldd_d">-</div></div>
-                            <div class="top-sub-param-box"><div class="param-title">LDD Energy</div><div class="top-sub-val" id="res2_ldd_e">-</div></div>
-                            <div class="top-sub-param-box"><div class="param-title">SD Dose</div><div class="top-sub-val" id="res2_sd_d">-</div></div>
-                            <div class="top-sub-param-box"><div class="param-title">SD Energy</div><div class="top-sub-val" id="res2_sd_e">-</div></div>
-                        </div>
-                    </div>
-
-                    <!-- TOP 3 -->
-                    <div class="top-sub-card" id="top3_card">
-                        <div class="top-sub-badge">TOP 3</div>
-                        <div class="d-flex w-100">
-                            <div class="top-sub-param-box"><div class="param-title">Lg</div><div class="top-sub-val" id="res3_lg">-</div></div>
-                            <div class="top-sub-param-box"><div class="param-title">LDD Dose</div><div class="top-sub-val" id="res3_ldd_d">-</div></div>
-                            <div class="top-sub-param-box"><div class="param-title">LDD Energy</div><div class="top-sub-val" id="res3_ldd_e">-</div></div>
-                            <div class="top-sub-param-box"><div class="param-title">SD Dose</div><div class="top-sub-val" id="res3_sd_d">-</div></div>
-                            <div class="top-sub-param-box"><div class="param-title">SD Energy</div><div class="top-sub-val" id="res3_sd_e">-</div></div>
-                        </div>
-                    </div>
+            <div class="option">
+                <span class="option-label">Device Region</span>
+                <div class="radio-row">
+                    <input type="radio" name="deviceType" id="device-short" value="Short" checked>
+                    <label for="device-short">Short Channel</label>
+                    <input type="radio" name="deviceType" id="device-long" value="Long">
+                    <label for="device-long">Long Channel</label>
                 </div>
             </div>
-        </div>
-    </div>
-</div>
 
+            <div class="option">
+                <label class="option-label" for="gateLength">Nominal Gate Length</label>
+                <select id="gateLength"></select>
+                <div class="feature-note" id="featureNote"></div>
+            </div>
+
+            <table class="spec-table" aria-label="목표 성능 범위">
+                <thead>
+                    <tr><th>적용</th><th>Metric</th><th>Min</th><th>Target</th><th>Max</th></tr>
+                </thead>
+                <tbody id="specBody"></tbody>
+            </table>
+
+            <div class="actions">
+                <button type="button" class="primary" id="searchBtn">최적 공정조건 탐색</button>
+                <a class="button-link secondary" id="analysisLink" href="/analysis?device=Short">Global SHAP 분석</a>
+            </div>
+            <div class="method-note">
+                Vth·SS는 Vd=0.05 V, Ion·Ioff·On/Off는 Vd=1.0 V 기준입니다. On/Off는 예측된 |Ion|/|Ioff|로 계산합니다. Lg는 선택값으로 고정하고 Dose는 log-uniform으로 생성합니다.
+            </div>
+        </section>
+
+        <section class="card" aria-labelledby="result-title">
+            <div class="status-line">
+                <h2 class="section-title" id="result-title">추천 결과</h2>
+                <span id="searchMeta"></span>
+            </div>
+            <div id="emptyResult" class="empty">왼쪽에서 device, Lg와 목표 스펙을 선택한 뒤 탐색을 시작하세요.</div>
+            <div id="resultContainer" hidden></div>
+        </section>
+    </div>
+</main>
+
+<script id="device-config-json" type="application/json">{{ device_configs | tojson }}</script>
+<script id="target-default-json" type="application/json">{{ target_defaults | tojson }}</script>
+<script id="target-label-json" type="application/json">{{ target_labels | tojson }}</script>
+<script id="target-unit-json" type="application/json">{{ target_units | tojson }}</script>
 <script>
-function formatSciStr(val) {
-    if(typeof val === 'string' && val.includes('e')) {
-        let parts = val.split('e');
-        let coeff = parseFloat(parts[0]).toFixed(2);
-        let exp = parseInt(parts[1]);
-        const superScript = {'-': '⁻', '0':'⁰', '1':'¹', '2':'²', '3':'³', '4':'⁴', '5':'⁵', '6':'⁶', '7':'⁷', '8':'⁸', '9':'⁹'};
-        let expStr = exp.toString().split('').map(c => superScript[c] || c).join('');
-        return `${coeff}×10${expStr}`;
-    }
-    return val;
+const deviceConfigs = JSON.parse(document.getElementById('device-config-json').textContent);
+const targetDefaults = JSON.parse(document.getElementById('target-default-json').textContent);
+const targetLabels = JSON.parse(document.getElementById('target-label-json').textContent);
+const targetUnits = JSON.parse(document.getElementById('target-unit-json').textContent);
+const targetOrder = ['Vth', 'SS', 'Ion', 'Ioff', 'OnOff'];
+
+function selectedDevice() {
+    return document.querySelector('input[name="deviceType"]:checked').value;
 }
 
-document.getElementById('searchBtn').addEventListener('click', async function() {
-    const btn = this;
-    btn.disabled = true;
-    btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span> 탐색 중...`;
-    
-    // 유저 입력 스펙 및 선택한 Oxide 물질 수집
-    let userSpecs = {};
-    const selectedOxide = document.querySelector('input[name="oxideOption"]:checked').value;
-    userSpecs['oxide_material'] = selectedOxide;
+function formatNumber(value, metric = '') {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return '-';
+    if (metric === 'Ion' || metric === 'Ioff' || metric === 'OnOff' || Math.abs(numeric) >= 1e5 || (Math.abs(numeric) > 0 && Math.abs(numeric) < 1e-3)) {
+        return numeric.toExponential(3);
+    }
+    return numeric.toFixed(4).replace(/\.?0+$/, '');
+}
 
-    const targets = ["Vth", "Id", "SS", "gm"];
-    targets.forEach(t => {
-        if(document.getElementById(`use_${t}`).checked) {
-            userSpecs[t] = {
-                "min": parseFloat(document.getElementById(`min_${t}`).value),
-                "max": parseFloat(document.getElementById(`max_${t}`).value),
-                "target": parseFloat(document.getElementById(`target_${t}`).value)
+function formatInputValue(target, value) {
+    const numeric = Number(value);
+    if (target === 'Ion' || target === 'Ioff' || target === 'OnOff') return numeric.toExponential(4);
+    if (target === 'Vth') return numeric.toFixed(4).replace(/\.?0+$/, '');
+    return numeric.toFixed(4).replace(/\.?0+$/, '');
+}
+
+function renderSpecs(device) {
+    const body = document.getElementById('specBody');
+    body.innerHTML = targetOrder.map(target => {
+        const defaults = targetDefaults[device][target];
+        const inputType = (target === 'Ion' || target === 'Ioff' || target === 'OnOff') ? 'text' : 'number';
+        const checked = target === 'OnOff' ? '' : 'checked';
+        return `
+            <tr>
+                <td><input type="checkbox" id="use-${target}" ${checked}></td>
+                <td><strong>${targetLabels[target]}</strong><br><small>${targetUnits[target]}</small></td>
+                <td><input type="${inputType}" id="min-${target}" value="${formatInputValue(target, defaults.min)}"></td>
+                <td><input type="${inputType}" class="target-input" id="target-${target}" value="${formatInputValue(target, defaults.target)}"></td>
+                <td><input type="${inputType}" id="max-${target}" value="${formatInputValue(target, defaults.max)}"></td>
+            </tr>`;
+    }).join('');
+}
+
+function renderDevice(device) {
+    const config = deviceConfigs[device];
+    const select = document.getElementById('gateLength');
+    select.innerHTML = config.gate_lengths.map(value =>
+        `<option value="${value}">${formatNumber(value)} μm (${formatNumber(value * 1000)} nm)</option>`
+    ).join('');
+    const extra = device === 'Short' ? ' + Anneal Time, Halo Dose/Energy' : '';
+    document.getElementById('featureNote').textContent = `학습 입력: Lg, LDD Dose/Energy, SD Dose/Energy${extra}`;
+    document.getElementById('analysisLink').href = `/analysis?device=${device}`;
+    renderSpecs(device);
+    document.getElementById('resultContainer').hidden = true;
+    document.getElementById('emptyResult').hidden = false;
+    document.getElementById('searchMeta').textContent = '';
+}
+
+function collectPayload() {
+    const device = selectedDevice();
+    const payload = {
+        device_type: device,
+        gate_length: Number(document.getElementById('gateLength').value)
+    };
+    targetOrder.forEach(target => {
+        if (document.getElementById(`use-${target}`).checked) {
+            payload[target] = {
+                min: Number(document.getElementById(`min-${target}`).value),
+                target: Number(document.getElementById(`target-${target}`).value),
+                max: Number(document.getElementById(`max-${target}`).value)
             };
         }
     });
+    return payload;
+}
 
+function renderValueGrid(values, labels, units, extraClass = '') {
+    return `<div class="value-grid ${extraClass}">` + Object.entries(values).map(([key, value]) => `
+        <div class="value">
+            <div class="label">${labels[key] || key}${units[key] ? ` · ${units[key]}` : ''}</div>
+            <div class="number">${formatNumber(value, key)}</div>
+        </div>`).join('') + `</div>`;
+}
+
+function renderResults(response) {
+    const config = deviceConfigs[response.device_type];
+    const parameterLabels = Object.fromEntries(config.features.map(feature => [feature.name, feature.label]));
+    const parameterUnits = Object.fromEntries(config.features.map(feature => [feature.name, feature.unit]));
+    const container = document.getElementById('resultContainer');
+    container.innerHTML = response.data.map(item => `
+        <article class="result-card ${item.rank === 1 ? 'top' : ''}">
+            <div class="result-head">
+                <span class="rank">TOP ${item.rank}</span>
+                <span class="confidence">Valid probability ${(item.valid_probability * 100).toFixed(1)}%</span>
+            </div>
+            <div class="result-body">
+                <div class="grid-title">Recommended process parameters</div>
+                ${renderValueGrid(item.params, parameterLabels, parameterUnits)}
+                <div class="grid-title">Predicted device characteristics</div>
+                ${renderValueGrid(item.predictions, targetLabels, targetUnits, 'prediction-grid')}
+            </div>
+        </article>`).join('');
+    container.hidden = false;
+    document.getElementById('emptyResult').hidden = true;
+    document.getElementById('searchMeta').textContent = `${response.device_type} · Lg ${formatNumber(response.gate_length * 1000)} nm · Candidates ${Number(response.candidate_count).toLocaleString()} · Seed ${response.candidate_seed} · ${response.time}s`;
+}
+
+document.querySelectorAll('input[name="deviceType"]').forEach(input => {
+    input.addEventListener('change', () => renderDevice(selectedDevice()));
+});
+
+document.getElementById('searchBtn').addEventListener('click', async function () {
+    const button = this;
+    button.disabled = true;
+    button.textContent = '탐색 중…';
     try {
         const response = await fetch('/search', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(userSpecs)
+            body: JSON.stringify(collectPayload())
         });
-        
-        const resData = await response.json();
-        document.getElementById('emptyResult').style.display = 'none';
-        
-        if(resData.status === 'success') {
-            document.getElementById('resultContainer').style.display = 'block';
-            document.getElementById('timeCost').innerText = `(Search time: ${resData.time}s)`;
-            const results = resData.data;
-            
-            for(let i=0; i<Math.min(3, results.length); i++) {
-                let item = results[i];
-                let p = item.params;
-                
-                document.getElementById(`res${i+1}_lg`).innerText = p[0].toFixed(4);
-                document.getElementById(`res${i+1}_ldd_d`).innerText = formatSciStr(p[1].toExponential(2));
-                document.getElementById(`res${i+1}_ldd_e`).innerText = p[2].toFixed(2);
-                document.getElementById(`res${i+1}_sd_d`).innerText = formatSciStr(p[3].toExponential(2));
-                document.getElementById(`res${i+1}_sd_e`).innerText = p[4].toFixed(2);
-                
-                if(i === 0) {
-                    let tvpHTML = "";
-                    targets.forEach(t => {
-                        if(userSpecs[t]) {
-                            let targetVal = userSpecs[t].target;
-                            let predVal = parseFloat(item[t.toLowerCase()]); 
-                            let delta = ((predVal - targetVal) / targetVal) * 100;
-                            let deltaClass = delta > 0 ? "delta-pos" : "delta-neg";
-                            let deltaSign = delta > 0 ? "+" : "";
-                            let mockSlider = `<div style="position:relative; width:100px; height:2px; background:#D1D5DB; margin-top:10px;">
-                                <div style="position:absolute; top:-4px; left:50%; width:1px; height:10px; background:#000;"></div>
-                                <div style="position:absolute; top:-5px; left:${Math.min(Math.max(50 + (delta/2), 0), 100)}%; width:12px; height:12px; background:#2563EB; border-radius:50%;"></div>
-                            </div>`;
-
-                            let dispTarget = (t === 'Id' || t === 'gm') ? formatSciStr(targetVal.toExponential(2)) : targetVal.toFixed(3);
-                            let dispPred = (t === 'Id' || t === 'gm') ? formatSciStr(predVal.toExponential(2)) : predVal.toFixed(3);
-
-                            tvpHTML += `<tr><td>${t}</td><td>${dispTarget}</td><td>${dispPred}</td><td class="${deltaClass}">${deltaSign}${delta.toFixed(1)}%</td><td>${mockSlider}</td></tr>`;
-                        }
-                    });
-                    document.getElementById('tvpBody').innerHTML = tvpHTML;
-                }
-            }
-            document.getElementById('top2_card').style.display = results.length > 1 ? 'flex' : 'none';
-            document.getElementById('top3_card').style.display = results.length > 2 ? 'flex' : 'none';
-        } else {
-            document.getElementById('resultContainer').style.display = 'none';
-            document.getElementById('emptyResult').style.display = 'block';
-            document.getElementById('emptyResult').innerHTML = `<span class="text-danger fw-bold fs-5">${resData.message}</span>`;
-        }
-    } catch (err) {
-        alert("서버 통신 중 오류가 발생했습니다.");
+        const data = await response.json();
+        if (data.status !== 'success') throw new Error(data.message || '탐색에 실패했습니다.');
+        renderResults(data);
+    } catch (error) {
+        document.getElementById('resultContainer').hidden = true;
+        const empty = document.getElementById('emptyResult');
+        empty.hidden = false;
+        empty.innerHTML = `<div class="warning">${error.message}</div>`;
     } finally {
-        btn.disabled = false;
-        btn.innerHTML = `최적 파라미터 탐색 시작 &rarr;`;
+        button.disabled = false;
+        button.textContent = '최적 공정조건 탐색';
     }
 });
+
+renderDevice('Short');
 </script>
 </body>
 </html>

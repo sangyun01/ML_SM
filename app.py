@@ -1,197 +1,499 @@
+"""Flask UI for short/long-channel TCAD inverse recipe recommendation."""
+
+from __future__ import annotations
+
+import base64
+import io
+import os
+import tempfile
+import time
+from pathlib import Path
+
+os.environ.setdefault(
+    "MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "tcad-matplotlib-cache")
+)
+
 import matplotlib
 
 matplotlib.use("Agg")
 
-from flask import Flask, render_template, request, jsonify
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import time
 import shap
-import matplotlib.pyplot as plt
-import io
-import base64
-from sklearn.ensemble import RandomForestRegressor
+from flask import Flask, jsonify, render_template, request
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+
+from ML_SM import (
+    CANDIDATE_SEED,
+    DEFAULT_WORKBOOK,
+    DEVICE_CONFIGS,
+    MODEL_TARGETS,
+    _inverse_target,
+    _transform_target,
+    build_recipe_classification_table,
+    build_regression_table,
+    candidate_seed_for_gate_length,
+    load_device_sheet,
+)
+
+
+RANDOM_STATE = 42
+N_TREES = 300
+SHAP_SAMPLE_SIZE = 200
+NUM_CANDIDATES = int(os.getenv("TCAD_NUM_CANDIDATES", "500000"))
+CANDIDATE_POOL_SEED = int(os.getenv("TCAD_CANDIDATE_SEED", str(CANDIDATE_SEED)))
+TOP_K = 3
+VALID_PROBABILITY_THRESHOLD = 0.5
+WORKBOOK_PATH = Path(os.getenv("TCAD_WORKBOOK", str(DEFAULT_WORKBOOK)))
+
+FEATURE_LABELS = {
+    "Lg": "Gate Length",
+    "LDD_Dose": "LDD Dose",
+    "LDD_Energy": "LDD Energy",
+    "SD_Dose": "SD Dose",
+    "SD_Energy": "SD Energy",
+    "anneal": "Anneal Time",
+    "halo_dose": "Halo Dose",
+    "halo_energy": "Halo Energy",
+}
+
+FEATURE_UNITS = {
+    "Lg": "μm",
+    "LDD_Dose": "cm⁻²",
+    "LDD_Energy": "keV",
+    "SD_Dose": "cm⁻²",
+    "SD_Energy": "keV",
+    "anneal": "s",
+    "halo_dose": "cm⁻²",
+    "halo_energy": "keV",
+}
+
+TARGET_LABELS = {
+    "Vth": "Vth (Vd=0.05 V)",
+    "SS": "SS (Vd=0.05 V)",
+    "Ion": "Ion (Vd=1.0 V)",
+    "Ioff": "|Ioff| (Vd=1.0 V)",
+    "OnOff": "Ion/|Ioff| (Vd=1.0 V)",
+}
+
+TARGET_UNITS = {
+    "Vth": "V",
+    "SS": "mV/dec",
+    "Ion": "A",
+    "Ioff": "A",
+    "OnOff": "ratio",
+}
+
+UI_TARGETS = (*MODEL_TARGETS, "OnOff")
+
 
 app = Flask(__name__)
 
-# 전역 변수로 두 개의 모델과 SHAP 이미지를 저장할 딕셔너리 생성
-models = {}
-shap_plots = {}
-
-input_features = ["Lg", "LDD_Dose", "LDD_Energy", "SD_Dose", "SD_Energy"]
-output_targets = ["Vth", "Id", "SS", "gm"]
-target_names = ["Vth", "Id", "SS", "gm"]
+models: dict[str, dict[str, object]] = {}
+shap_plots: dict[str, dict[str, str]] = {}
+shap_data_store: dict[str, dict[str, dict[str, float]]] = {}
+client_device_configs: dict[str, dict[str, object]] = {}
+target_defaults: dict[str, dict[str, dict[str, float]]] = {}
 
 
-# =====================================================================
-# 1. 모델 학습 및 SHAP 그래프 생성 함수
-# =====================================================================
-def train_model_and_shap(csv_filename, material_name):
-    print(f"\n=== 🚀 {material_name} 데이터 로딩 및 모델 학습 시작 ===")
-    df = pd.read_csv(csv_filename)
-    df = df[df["Vd"] == 0.05]
+def _numeric_quantile(values: pd.Series, probability: float, log_scale: bool) -> float:
+    numeric = values.to_numpy(dtype=float)
+    if log_scale:
+        numeric = np.log10(np.clip(np.abs(numeric), 1e-30, None))
+        return float(10 ** np.quantile(numeric, probability))
+    return float(np.quantile(numeric, probability))
 
-    X = df[input_features].values
-    Y = df[output_targets].values
 
-    model = RandomForestRegressor(n_estimators=100, n_jobs=-1, random_state=42)
-    model.fit(X, Y)
-    print(f"✅ {material_name} 모델 학습 완료!")
+def _build_target_defaults(regression_table: pd.DataFrame) -> dict[str, dict[str, float]]:
+    defaults: dict[str, dict[str, float]] = {}
+    target_values = {
+        target: regression_table[target] for target in MODEL_TARGETS
+    }
+    target_values["OnOff"] = (
+        regression_table["Ion"].abs()
+        / regression_table["Ioff"].abs().clip(lower=1e-30)
+    )
+    for target in UI_TARGETS:
+        log_scale = target in {"Ion", "Ioff", "OnOff"}
+        defaults[target] = {
+            "min": _numeric_quantile(target_values[target], 0.10, log_scale),
+            "target": _numeric_quantile(target_values[target], 0.50, log_scale),
+            "max": _numeric_quantile(target_values[target], 0.90, log_scale),
+        }
+    return defaults
 
-    print(f"=== {material_name} SHAP 대시보드 생성 중 ===")
-    explainer = shap.TreeExplainer(model)
-    X_sample = shap.sample(X, 500) if len(X) > 500 else X
-    shap_values = explainer.shap_values(X_sample)
 
-    if isinstance(shap_values, list):
-        shap_values = np.stack(shap_values, axis=-1)
+def _build_client_config(
+    device_name: str,
+    regression_table: pd.DataFrame,
+    input_features: tuple[str, ...],
+) -> dict[str, object]:
+    features = []
+    for feature in input_features:
+        values = regression_table[feature].to_numpy(dtype=float)
+        unique_values = sorted(np.unique(values).tolist())
+        features.append(
+            {
+                "name": feature,
+                "label": FEATURE_LABELS[feature],
+                "unit": FEATURE_UNITS[feature],
+                "min": float(np.min(values)),
+                "max": float(np.max(values)),
+                "choices": unique_values if feature == "Lg" else None,
+                "log_scale": feature in {"LDD_Dose", "SD_Dose", "halo_dose"},
+            }
+        )
+    return {
+        "name": device_name,
+        "features": features,
+        "gate_lengths": sorted(regression_table["Lg"].unique().tolist()),
+    }
 
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    axes = axes.flatten()
 
-    for i, target in enumerate(target_names):
-        mean_abs_shap = np.abs(shap_values[:, :, i]).mean(axis=0)
-        if mean_abs_shap.sum() == 0:
-            weights_pct = np.zeros_like(mean_abs_shap)
-        else:
-            weights_pct = (mean_abs_shap / mean_abs_shap.sum()) * 100
+def _make_shap_outputs(
+    device_name: str,
+    regressors: dict[str, RandomForestRegressor],
+    X: pd.DataFrame,
+) -> tuple[dict[str, str], dict[str, dict[str, float]]]:
+    sampled = shap.sample(
+        X,
+        min(SHAP_SAMPLE_SIZE, len(X)),
+        random_state=RANDOM_STATE,
+    )
+    plots: dict[str, str] = {}
+    importance_data: dict[str, dict[str, float]] = {}
 
-        feature_names_with_pct = [
-            f"{name} ({pct:.1f}%)" for name, pct in zip(input_features, weights_pct)
+    for target, model in regressors.items():
+        explainer = shap.TreeExplainer(model)
+        values = explainer.shap_values(sampled)
+        mean_abs = np.abs(values).mean(axis=0)
+        total = mean_abs.sum()
+        percentages = np.zeros_like(mean_abs) if total == 0 else mean_abs / total * 100
+        importance_data[target] = {
+            feature: float(value)
+            for feature, value in zip(X.columns, percentages)
+        }
+
+        display_names = [
+            f"{FEATURE_LABELS[feature]} ({percentage:.1f}%)"
+            for feature, percentage in zip(X.columns, percentages)
         ]
-
-        plt.sca(axes[i])
+        plt.figure(figsize=(8, 5.5))
         shap.summary_plot(
-            shap_values[:, :, i],
-            X_sample,
-            feature_names=feature_names_with_pct,
+            values,
+            sampled,
+            feature_names=display_names,
             show=False,
             plot_size=None,
         )
-        axes[i].set_title(
-            f"{material_name} SHAP Importance for {target}", fontsize=14, pad=15
+        model_suffix = " (log model)" if target in {"SS", "Ion", "Ioff"} else ""
+        plt.title(
+            f"{device_name} SHAP Importance for {TARGET_LABELS[target]}{model_suffix}",
+            fontsize=13,
+            pad=14,
         )
+        plt.tight_layout()
+        image = io.BytesIO()
+        plt.savefig(image, format="png", bbox_inches="tight", dpi=120)
+        image.seek(0)
+        plots[target] = base64.b64encode(image.getvalue()).decode("ascii")
+        plt.close()
 
-    plt.tight_layout()
-
-    img = io.BytesIO()
-    plt.savefig(img, format="png", bbox_inches="tight")
-    img.seek(0)
-    plot_url = base64.b64encode(img.getvalue()).decode()
-    plt.close()
-    print(f"✅ {material_name} SHAP 그래프 생성 완료!")
-
-    return model, plot_url
+    return plots, importance_data
 
 
-# 서버 기동 시 두 가지 물질에 대한 모델을 모두 학습시킵니다.
-models["SiO2"], shap_plots["SiO2"] = train_model_and_shap("simulation_data.csv", "SiO2")
-models["HKMG"], shap_plots["HKMG"] = train_model_and_shap(
-    "simulation_data_HKMG.csv", "HKMG"
-)
-print("\n🎉 모든 모델 학습 완료! 웹 서버가 준비되었습니다.")
+def train_device_model(device_name: str) -> None:
+    config = DEVICE_CONFIGS[device_name]
+    print(f"\n=== {device_name} model training ===")
+    source = load_device_sheet(WORKBOOK_PATH, config)
+    recipe_table = build_recipe_classification_table(source, config)
+    regression_table = build_regression_table(source, config)
+    features = list(config.input_features)
+
+    classifier = RandomForestClassifier(
+        n_estimators=N_TREES,
+        class_weight="balanced",
+        n_jobs=-1,
+        random_state=RANDOM_STATE,
+    )
+    classifier.fit(recipe_table[features], recipe_table["Label"])
+
+    regressors: dict[str, RandomForestRegressor] = {}
+    X = regression_table[features].reset_index(drop=True)
+    for target in MODEL_TARGETS:
+        regressor = RandomForestRegressor(
+            n_estimators=N_TREES,
+            n_jobs=-1,
+            random_state=RANDOM_STATE,
+        )
+        regressor.fit(
+            X,
+            _transform_target(target, regression_table[target].to_numpy(dtype=float)),
+        )
+        regressors[target] = regressor
+
+    models[device_name] = {
+        "config": config,
+        "classifier": classifier,
+        "regressors": regressors,
+        "training_table": regression_table,
+    }
+    client_device_configs[device_name] = _build_client_config(
+        device_name,
+        regression_table,
+        config.input_features,
+    )
+    target_defaults[device_name] = _build_target_defaults(regression_table)
+    plots, importance = _make_shap_outputs(device_name, regressors, X)
+    shap_plots[device_name] = plots
+    shap_data_store[device_name] = importance
+    print(
+        f"{device_name}: recipes={len(recipe_table)}, "
+        f"valid regression rows={len(regression_table)}, "
+        f"Lg={client_device_configs[device_name]['gate_lengths']}"
+    )
 
 
-# =====================================================================
-# 2. 최적 파라미터 탐색 함수 (사용할 모델을 인자로 받음)
-# =====================================================================
-def calcul_parameters(
-    target_model, param_bounds, target_specs, num_candidates=500000, top_k=3
-):
-    candidates = np.zeros((num_candidates, 5))
-    for i in range(5):
-        min_val, max_val = param_bounds[i]
-        candidates[:, i] = np.random.uniform(min_val, max_val, num_candidates)
+def _generate_candidates(bundle: dict[str, object], gate_length: float) -> pd.DataFrame:
+    config = bundle["config"]
+    training_table = bundle["training_table"]
+    rng = np.random.default_rng(
+        candidate_seed_for_gate_length(gate_length, CANDIDATE_POOL_SEED)
+    )
+    candidate_data: dict[str, np.ndarray] = {}
 
-    predictions = target_model.predict(candidates)
-    scores = np.zeros(num_candidates)
-    valid_mask = np.ones(num_candidates, dtype=bool)
+    for feature in config.input_features:
+        values = training_table[feature].to_numpy(dtype=float)
+        if feature == "Lg":
+            candidate_data[feature] = np.full(NUM_CANDIDATES, gate_length)
+        elif feature in {"LDD_Dose", "SD_Dose", "halo_dose"}:
+            candidate_data[feature] = np.power(
+                10.0,
+                rng.uniform(np.log10(values.min()), np.log10(values.max()), NUM_CANDIDATES),
+            )
+        else:
+            candidate_data[feature] = rng.uniform(
+                values.min(), values.max(), NUM_CANDIDATES
+            )
 
-    for i, target_name in enumerate(target_names):
-        if target_name in target_specs:
-            spec = target_specs[target_name]
-            pred_vals = predictions[:, i]
+    return pd.DataFrame(candidate_data, columns=list(config.input_features))
 
-            if "min" in spec:
-                valid_mask &= pred_vals >= spec["min"]
-            if "max" in spec:
-                valid_mask &= pred_vals <= spec["max"]
-            if "target" in spec:
-                scores += ((pred_vals - spec["target"]) / spec["target"]) ** 2
 
-    valid_candidates = candidates[valid_mask]
-    valid_scores = scores[valid_mask]
-    valid_predictions = predictions[valid_mask]
+def _allowed_gate_length(device_name: str, gate_length: float) -> bool:
+    allowed = client_device_configs[device_name]["gate_lengths"]
+    return any(np.isclose(gate_length, choice) for choice in allowed)
 
-    if len(valid_candidates) == 0:
+
+def _predict_valid_candidates(
+    bundle: dict[str, object], candidates: pd.DataFrame
+) -> pd.DataFrame:
+    classifier = bundle["classifier"]
+    probabilities = classifier.predict_proba(candidates)[:, 1]
+    valid_mask = probabilities >= VALID_PROBABILITY_THRESHOLD
+    valid = candidates.loc[valid_mask].copy()
+    valid["valid_probability"] = probabilities[valid_mask]
+
+    feature_columns = list(bundle["config"].input_features)
+    for target, regressor in bundle["regressors"].items():
+        transformed = regressor.predict(valid[feature_columns])
+        valid[target] = _inverse_target(target, transformed)
+    valid["OnOff"] = valid["Ion"] / np.clip(valid["Ioff"], 1e-30, None)
+    return valid
+
+
+def _target_error(target: str, predictions: np.ndarray, target_value: float) -> np.ndarray:
+    if target in {"Ion", "Ioff", "OnOff"}:
+        predicted_log = np.log10(np.clip(predictions, 1e-30, None))
+        target_log = np.log10(max(target_value, 1e-30))
+        return (predicted_log - target_log) ** 2
+    denominator = max(abs(target_value), 1e-12)
+    return ((predictions - target_value) / denominator) ** 2
+
+
+def recommend(
+    device_name: str,
+    gate_length: float,
+    target_specs: dict[str, dict[str, float]],
+) -> pd.DataFrame | None:
+    bundle = models[device_name]
+    candidates = _generate_candidates(bundle, gate_length)
+    valid = _predict_valid_candidates(bundle, candidates)
+    if valid.empty:
         return None
 
-    best_indices = np.argsort(valid_scores)[:top_k]
-    return valid_candidates[best_indices], valid_predictions[best_indices]
+    mask = np.ones(len(valid), dtype=bool)
+    score = np.zeros(len(valid), dtype=float)
+    for target in UI_TARGETS:
+        if target not in target_specs:
+            continue
+        spec = target_specs[target]
+        predictions = valid[target].to_numpy(dtype=float)
+        mask &= predictions >= spec["min"]
+        mask &= predictions <= spec["max"]
+        score += _target_error(target, predictions, spec["target"])
+
+    valid["score"] = score
+    filtered = valid.loc[mask]
+    if filtered.empty:
+        return None
+    return filtered.nsmallest(TOP_K, "score")
 
 
-# =====================================================================
-# 3. 웹 라우팅
-# =====================================================================
+def _parse_target_specs(payload: dict[str, object]) -> dict[str, dict[str, float]]:
+    specs: dict[str, dict[str, float]] = {}
+    for target in UI_TARGETS:
+        if target not in payload:
+            continue
+        raw = payload[target]
+        spec = {key: float(raw[key]) for key in ("min", "target", "max")}
+        if not spec["min"] <= spec["target"] <= spec["max"]:
+            raise ValueError(f"{target}: min ≤ target ≤ max 조건이 필요합니다.")
+        if target in {"Ion", "Ioff", "OnOff"} and spec["min"] <= 0:
+            raise ValueError(f"{target}: 로그 점수 계산을 위해 양수여야 합니다.")
+        specs[target] = spec
+    if not specs:
+        raise ValueError("최소 한 개의 목표 스펙을 선택하세요.")
+    return specs
+
+
+def _serialize_row(row: pd.Series, bundle: dict[str, object], rank: int) -> dict[str, object]:
+    parameters = {
+        feature: float(row[feature]) for feature in bundle["config"].input_features
+    }
+    predictions = {target: float(row[target]) for target in UI_TARGETS}
+    return {
+        "rank": rank,
+        "params": parameters,
+        "predictions": predictions,
+        "valid_probability": float(row["valid_probability"]),
+        "score": float(row["score"]),
+    }
+
+
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template(
+        "index.html",
+        device_configs=client_device_configs,
+        target_defaults=target_defaults,
+        target_labels=TARGET_LABELS,
+        target_units=TARGET_UNITS,
+    )
 
 
 @app.route("/analysis")
 def analysis():
-    # URL 쿼리스트링으로 넘어온 material 값 확인 (기본값 SiO2)
-    material = request.args.get("material", "SiO2")
-    # 선택된 물질에 맞는 SHAP 그래프를 전달
-    selected_plot = shap_plots.get(material, shap_plots["SiO2"])
-
-    return render_template("analysis.html", shap_plot=selected_plot, material=material)
+    device_name = request.args.get("device", "Short")
+    if device_name not in models:
+        device_name = "Short"
+    return render_template(
+        "analysis.html",
+        shap_plots=shap_plots[device_name],
+        shap_data=shap_data_store[device_name],
+        device=device_name,
+        feature_labels=FEATURE_LABELS,
+        target_labels=TARGET_LABELS,
+    )
 
 
 @app.route("/search", methods=["POST"])
 def search():
-    user_specs = request.json
+    try:
+        payload = request.get_json(force=True)
+        device_name = payload.get("device_type", "Short")
+        if device_name not in models:
+            raise ValueError("지원하지 않는 device type입니다.")
+        gate_length = float(payload["gate_length"])
+        if not _allowed_gate_length(device_name, gate_length):
+            raise ValueError("Gate Length는 학습 데이터의 선택값만 사용할 수 있습니다.")
+        specs = _parse_target_specs(payload)
 
-    # 프론트엔드에서 보내준 'oxide_material' 값 꺼내기 (기본값 SiO2)
-    material = user_specs.get("oxide_material", "SiO2")
+        started = time.perf_counter()
+        result = recommend(device_name, gate_length, specs)
+        elapsed = time.perf_counter() - started
+        if result is None:
+            return jsonify(
+                {
+                    "status": "fail",
+                    "message": "조건을 만족하는 valid 후보를 찾지 못했습니다.",
+                }
+            )
 
-    # 선택된 물질에 맞는 모델 불러오기
-    selected_model = models.get(material, models["SiO2"])
-
-    parameter_bounds = [(0.05, 1), (1e11, 1e15), (10, 70), (1e14, 1e18), (10, 40)]
-
-    start_time = time.time()
-    result = calcul_parameters(selected_model, parameter_bounds, user_specs)
-    end_time = time.time()
-
-    if result is None:
+        bundle = models[device_name]
+        records = [
+            _serialize_row(row, bundle, rank)
+            for rank, (_, row) in enumerate(result.iterrows(), start=1)
+        ]
         return jsonify(
-            {"status": "fail", "message": "조건을 만족하는 후보를 찾지 못했습니다."}
-        )
-
-    best_inputs, best_outputs = result
-
-    results_list = []
-    for rank in range(len(best_inputs)):
-        results_list.append(
             {
-                "rank": rank + 1,
-                "params": np.round(best_inputs[rank], 4).tolist(),
-                "vth": round(best_outputs[rank][0], 4),
-                "id": f"{best_outputs[rank][1]:.4e}",
-                "ss": round(best_outputs[rank][2], 4),
-                "gm": f"{best_outputs[rank][3]:.4e}",
+                "status": "success",
+                "time": round(elapsed, 4),
+                "device_type": device_name,
+                "gate_length": gate_length,
+                "candidate_count": NUM_CANDIDATES,
+                "candidate_seed": candidate_seed_for_gate_length(
+                    gate_length, CANDIDATE_POOL_SEED
+                ),
+                "data": records,
             }
         )
+    except (KeyError, TypeError, ValueError) as error:
+        return jsonify({"status": "fail", "message": str(error)}), 400
 
-    return jsonify(
-        {
-            "status": "success",
-            "time": round(end_time - start_time, 4),
-            "data": results_list,
-        }
-    )
+
+@app.route("/predict_single", methods=["POST"])
+def predict_single():
+    try:
+        payload = request.get_json(force=True)
+        device_name = payload.get("device_type", "Short")
+        if device_name not in models:
+            raise ValueError("지원하지 않는 device type입니다.")
+        bundle = models[device_name]
+        features = list(bundle["config"].input_features)
+        parameters = payload["params"]
+        row = pd.DataFrame(
+            [{feature: float(parameters[feature]) for feature in features}],
+            columns=features,
+        )
+        gate_length = float(row.iloc[0]["Lg"])
+        if not _allowed_gate_length(device_name, gate_length):
+            raise ValueError("Gate Length는 학습 데이터의 선택값만 사용할 수 있습니다.")
+
+        probability = float(bundle["classifier"].predict_proba(row)[0, 1])
+        if probability < VALID_PROBABILITY_THRESHOLD:
+            return jsonify(
+                {
+                    "status": "fail",
+                    "message": "이 공정조건은 TCAD 결과가 invalid일 가능성이 높습니다.",
+                    "valid_probability": probability,
+                }
+            )
+
+        predictions = {}
+        for target, regressor in bundle["regressors"].items():
+            transformed = regressor.predict(row)[0]
+            predictions[target] = float(_inverse_target(target, transformed))
+        predictions["OnOff"] = predictions["Ion"] / max(predictions["Ioff"], 1e-30)
+        return jsonify(
+            {
+                "status": "success",
+                "predictions": predictions,
+                "valid_probability": probability,
+            }
+        )
+    except (KeyError, TypeError, ValueError) as error:
+        return jsonify({"status": "fail", "message": str(error)}), 400
+
+
+if not WORKBOOK_PATH.exists():
+    raise FileNotFoundError(f"Integrated workbook not found: {WORKBOOK_PATH}")
+
+for device in DEVICE_CONFIGS:
+    train_device_model(device)
+
+print("\nAll Short/Long models are ready.")
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, use_reloader=False)
