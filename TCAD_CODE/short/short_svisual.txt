@@ -1,0 +1,225 @@
+#setdep @node|sdevice@
+
+set n @node|sdevice@
+set status @[gproject::GetNodeStatus @node|sdevice@]@
+
+
+# Create plot
+if {[llength [list_plots Plot_1D]] == 0} {
+
+  create_plot -1d -name Plot_1D
+  select_plots Plot_1D
+
+  set_plot_prop -hide_title -show_legend
+
+  set_axis_prop \
+    -title_font_size 16 \
+    -scale_font_size 14
+
+  set_axis_prop \
+    -axis x \
+    -title "Gate Voltage (V)" \
+    -type linear
+
+  set_axis_prop \
+    -axis y \
+    -title "Drain Current (A/<greek>m</greek>m)" \
+    -type log
+
+  set_legend_prop \
+    -label_font_size 14 \
+    -location bottom_right
+}
+
+
+# Load SDevice result
+load_file @[relpath IdVg_n@node|sdevice@_des.plt]@ \
+  -name PLT($n)
+
+
+# Create ID-VG curve
+create_curve \
+  -name IdVg($n) \
+  -dataset PLT($n) \
+  -axisX "gate InnerVoltage" \
+  -axisY "drain TotalCurrent"
+
+
+# Extract parameters
+if {$status == "done"} {
+
+  load_library extract
+
+  set Vgs [
+    get_variable_data \
+      "gate OuterVoltage" \
+      -dataset PLT($n)
+  ]
+
+  set Ids [
+    get_variable_data \
+      "drain TotalCurrent" \
+      -dataset PLT($n)
+  ]
+
+# Drain current 절댓값
+ext::AbsList \
+   -out AbsIds \
+   -x $Ids
+
+# 측정할 gate voltage
+set VgOn  2.5
+set VgOff 0.0
+
+# Ion = |Id| at Vg=2.5 V
+ext::ExtractValue \
+   -out Ion \
+   -name Ion \
+   -x $Vgs \
+   -y $AbsIds \
+   -xo $VgOn \
+   -f "%.3e"
+
+# Ioff = |Id| at Vg=0 V
+ext::ExtractValue \
+   -out Ioff \
+   -name Ioff \
+   -x $Vgs \
+   -y $AbsIds \
+   -xo $VgOff \
+   -f "%.3e"
+
+
+  # ----------------------------------------------------------
+  # Vg 최솟값과 최댓값에서의 Id 탐색
+  # ----------------------------------------------------------
+  set Vg_min [lindex $Vgs 0]
+  set Vg_max [lindex $Vgs 0]
+
+  set Id_at_Vg_min [lindex $Ids 0]
+  set Id_at_Vg_max [lindex $Ids 0]
+
+
+  foreach Vg_value $Vgs Id_value $Ids {
+
+    if {$Vg_value < $Vg_min} {
+      set Vg_min $Vg_value
+      set Id_at_Vg_min $Id_value
+    }
+
+    if {$Vg_value > $Vg_max} {
+      set Vg_max $Vg_value
+      set Id_at_Vg_max $Id_value
+    }
+  }
+
+
+  # 전류 절댓값
+  set Id_start [
+    expr {abs(double($Id_at_Vg_min))}
+  ]
+
+  set Id_end [
+    expr {abs(double($Id_at_Vg_max))}
+  ]
+
+
+  # GateResponse도 Workbench에 기록
+  if {$Id_start > 0} {
+
+    set GateResponse [
+      expr {$Id_end / $Id_start}
+    ]
+
+  } else {
+
+    set GateResponse 0
+  }
+
+  puts "DOE: GateResponse [format %.6e $GateResponse]"
+
+
+  # 정상 NMOS: Vg 증가 시 |Id| 증가
+  if {$Id_end > $Id_start} {
+
+    set CurveValid 1
+
+  } else {
+
+    set CurveValid 0
+  }
+
+  puts "DOE: CurveValid $CurveValid"
+
+
+  # ----------------------------------------------------------
+  # 정상 NMOS 곡선에서만 Vtgm과 SS 추출
+  # ----------------------------------------------------------
+  if {$CurveValid == 1} {
+
+    ext::ExtractVtgm \
+      out= Vtgm \
+      name= Vtgm \
+      v= $Vgs \
+      i= $Ids
+
+
+    # Vtgm이 정상적인 숫자인 경우에만 SS 계산
+    if {[string is double -strict $Vtgm]} {
+
+      set Vss [
+        expr {$Vtgm / 3.0}
+      ]
+
+
+      # Vtgm/3이 실제 Vg sweep 범위 안에 있을 때만 추출
+      if {
+        $Vss >= $Vg_min &&
+        $Vss <= $Vg_max
+      } {
+
+        ext::ExtractSS \
+          out= SS \
+          name= SS \
+          v= $Vgs \
+          i= $Ids \
+          vo= $Vss
+
+      } else {
+
+        puts "DOE: SS x"
+      }
+
+    } else {
+
+      puts "DOE: SS x"
+    }
+
+  } else {
+
+    # Vg 증가 시 Id가 감소하는 비정상 곡선
+    puts "DOE: Vtgm x"
+    puts "DOE: SS x"
+  }
+}
+
+
+# Curve properties
+if {[info exists runVisualizerNodesTogether]} {
+
+  set_curve_prop IdVg($n) \
+    -label "IdVg $legend" \
+    -color $color \
+    -line_style $line \
+    -line_width 3
+
+} else {
+
+  puts "To see the curves, select both Sentaurus Visual nodes and at the toolbar"
+  puts "press the Run selected Visualizer Nodes Together button."
+}
+
+
+if {![info exists runVisualizerNodesTogether]} {
+  exit
+}

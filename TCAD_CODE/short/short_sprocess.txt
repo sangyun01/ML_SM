@@ -1,0 +1,87 @@
+#header
+
+#endheader
+
+line x location= 0    spacing= 0.01 tag= top
+line x location= 0.15 spacing= 0.02
+line x location= 1.0  spacing= 0.2  tag= bottom
+
+line y location= 0.0      spacing= 0.1*@Lg@  tag= left
+line y location= 0.5*@Lg@ spacing= 0.05*@Lg@
+line y location= 2*@Lg@   spacing= @Lg@      tag= right 
+
+region Silicon xlo= top xhi= bottom ylo= left yhi= right 
+
+## step Init
+init concentration= 1e+17 field= Boron slice.angle= 180 !DelayFullD
+
+## turn off 3-stream diffusion for speed.
+pdbSet Silicon Dopant DiffModel ChargedFermi
+
+## step Gate Oxidation
+pdbSet Oxide Grid perp.add.dist 5e-8
+
+set LgValue @Lg@
+
+if {abs($LgValue - 0.065) < 1.0e-6} {
+    # Lg = 65 nm → tox = 2 nm
+    set GateOxThickness 0.002
+} elseif {abs($LgValue - 0.090) < 1.0e-6} {
+    # Lg = 90 nm → tox = 2.5 nm
+    set GateOxThickness 0.0025
+} else {
+    error "Gate oxide thickness is not defined for Lg=$LgValue"
+}
+
+deposit Oxide type= isotropic thickness= $GateOxThickness
+
+
+diffuse time= 10 temperature= 950
+
+
+## step extract_tox
+set oxidelayer [lindex [layers y=0 Oxide] 1]
+puts "DOE: tox [format %.4f [expr \
+    [lindex $oxidelayer 1] - [lindex $oxidelayer 0]]]"
+
+## step Deposit poly
+deposit PolySilicon type= anisotropic thickness= 0.1 
+
+## step Poly Mask
+mask name= poly left=-@Lg@/2 right= @Lg@/2
+
+## step Etch Poly
+etch PolySilicon type= anisotropic thickness= 0.12 mask= poly
+etch Oxide type= anisotropic thickness= 0.02
+
+## step LDD implant
+implant Arsenic dose= @LDD_Dose@ energy= @LDD_Energy@
+implant Boron dose= @halo_dose@ energy= @halo_energy@ tilt= 35 
+
+## step Spacer formation
+deposit Nitride type= isotropic thickness= 0.3*@Lg@
+etch  Nitride type= anisotropic thickness= 0.35*@Lg@
+
+## step SD Implant
+implant Phosphorus dose= @SD_Dose@ energy= @SD_Energy@
+
+
+## step SD Anneal
+diffuse time=@anneal@<s> temperature= 1000
+
+
+## step contactSD
+deposit Aluminum type= anisotropic thickness= 0.05
+mask name= contact left= @Lg@*1.2 
+etch Aluminum type= anisotropic thickness= 0.1 mask= contact 
+
+## step Reflect
+transform reflect left
+
+contact name= substrate bottom
+contact name= source point y= -@Lg@*1.5 x= -0.010 replace
+contact name= drain  point y= @Lg@*1.5  x= -0.010 replace
+contact name= gate   point y= 0         x= -0.050 
+
+## step save
+struct tdr= n@node@ !Gas !interfaces

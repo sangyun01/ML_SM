@@ -1,0 +1,58 @@
+File {
+   * input files:
+   Grid=   "@tdr@"
+   * output files:
+   Plot=   "@tdrdat@"
+   Current="@plot@"
+   Output= "@log@"
+}
+
+Electrode {
+   { Name="source"    Voltage= 0.0 }
+   { Name="drain"     Voltage= 0.0 }
+   { Name="gate"      Voltage= 0.0 }
+   { Name="substrate" Voltage= 0.0 }
+}
+
+Physics{
+   EffectiveIntrinsicDensity( OldSlotboom )     
+}
+
+Physics(Material="Silicon"){
+   Mobility(
+      PhuMob
+      HighFieldSaturation
+      Enormal
+   )
+   Recombination(
+      SRH( DopingDependence )
+   )           
+}
+
+Math { 
+   Extrapolate
+   Iterations= 20
+   ExitOnFailure
+}
+
+Solve {
+*- Creating initial guess:
+   Coupled(Iterations= 100){ Poisson } 
+   Coupled {Poisson Electron Hole}
+
+*- Ramp to drain to Vd
+   Quasistationary( 
+      InitialStep= 0.1 Increment= 1.5 
+      MinStep= 1e-5 MaxStep= 1 
+      Goal { Name="drain" Voltage=@Vd@ } 
+   ){ Coupled {Poisson Electron Hole} } 
+
+*- Vg sweep 
+   NewCurrentPrefix="IdVg_" 
+   Quasistationary( 
+      DoZero 
+      InitialStep= 0.01 Increment= 1.5 
+      MinStep= 1e-5 MaxStep= 0.05 
+      Goal { Name="gate" Voltage= 2.5 } 
+   ){ Coupled {Poisson Electron Hole} }
+}
