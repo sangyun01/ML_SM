@@ -1,6 +1,5 @@
-# 🐻‍❄️ SCOUT: Surrogate-guided Candidate Screening for TCAD-verified Process Design
+# SCOUT: Surrogate-guided Candidate Screening for TCAD-verified Process Design
 
-> **[2026 POLARIS Semiconductor Innovation Festival (SIF)](https://polargate.disu.ac.kr/contest/SIF2026/winner?sc=y)**
 > Team-대전야호 (Daejeon-Yaho) · Category: Device / Process
 
 ## Introduction
@@ -130,9 +129,8 @@ python3 app.py       # launch the recommendation UI (http://127.0.0.1:5000/)
 
 ---
 
-# Korean Version: 🐻‍❄️ SCOUT: TCAD–ML 기반 2차원 Planar NMOS 역설계 및 공정 레시피 추천 시스템
+# Korean Version:  SCOUT: TCAD–ML 기반 2차원 Planar NMOS 역설계 및 공정 레시피 추천 시스템
 
-> **[2026 POLARIS Semiconductor Innovation Festival (SIF)](https://polargate.disu.ac.kr/contest/SIF2026/winner?sc=y)**
 > Team-대전야호 · 출품 분야: 소자 / 공정
 
 ## Introduction
