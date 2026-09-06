@@ -24,7 +24,7 @@ import shap
 from flask import Flask, jsonify, render_template, request
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 
-from ML_SM import (
+from CODE.ML_SM import (
     CANDIDATE_SEED,
     DEFAULT_WORKBOOK,
     DEVICE_CONFIGS,

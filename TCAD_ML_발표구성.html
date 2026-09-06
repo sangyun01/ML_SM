@@ -1,0 +1,808 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TCAD–ML 역설계 발표덱</title>
+<style>
+  /* ---- local fonts (reports/assets) ---- */
+  @font-face{font-family:"Pretendard";src:url("reports/assets/Pretendard-Regular.ttf") format("truetype");font-weight:400;font-display:swap}
+  @font-face{font-family:"Pretendard";src:url("reports/assets/Pretendard-M.ttf") format("truetype");font-weight:500;font-display:swap}
+  @font-face{font-family:"Pretendard";src:url("reports/assets/Pretendard-Bold.ttf") format("truetype");font-weight:700;font-display:swap}
+  @font-face{font-family:"NanumGothic";src:url("reports/assets/NanumGothic-Regular.ttf") format("truetype");font-weight:400;font-display:swap}
+  @font-face{font-family:"NanumGothic";src:url("reports/assets/NanumGothic-Bold.ttf") format("truetype");font-weight:700;font-display:swap}
+
+  :root{
+    --paper:#eef1f4;
+    --surface:#ffffff;
+    --surface-2:#e9edf1;
+    --ink:#17202b;
+    --muted:#5a6675;
+    --faint:#8b96a3;
+    --line:#dbe1e8;
+    --line-strong:#c3ccd6;
+    --accent:#1d5fa8;
+    --accent-ink:#123c6b;
+    --accent-soft:#e2ecf7;
+    --signal:#b8532c;
+    --signal-soft:#f6e6dd;
+    --ok:#1f7a52;
+    --shadow:0 1px 2px rgba(20,35,55,.05), 0 12px 34px rgba(20,35,55,.08);
+    --sans:"Pretendard","NanumGothic",-apple-system,system-ui,"Segoe UI",sans-serif;
+    --label:"Pretendard","NanumGothic",system-ui,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --paper:#0d1219; --surface:#151c26; --surface-2:#1b2430;
+      --ink:#e8edf3; --muted:#9aa7b5; --faint:#6f7c8b;
+      --line:#26303d; --line-strong:#354351;
+      --accent:#5fa2e0; --accent-ink:#a9cef0; --accent-soft:#152838;
+      --signal:#e08a5f; --signal-soft:#33200f; --ok:#5cbd8e;
+      --shadow:0 1px 2px rgba(0,0,0,.35), 0 14px 40px rgba(0,0,0,.45);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#0d1219; --surface:#151c26; --surface-2:#1b2430;
+    --ink:#e8edf3; --muted:#9aa7b5; --faint:#6f7c8b;
+    --line:#26303d; --line-strong:#354351;
+    --accent:#5fa2e0; --accent-ink:#a9cef0; --accent-soft:#152838;
+    --signal:#e08a5f; --signal-soft:#33200f; --ok:#5cbd8e;
+    --shadow:0 1px 2px rgba(0,0,0,.35), 0 14px 40px rgba(0,0,0,.45);
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-weight:400;line-height:1.5;
+    -webkit-font-smoothing:antialiased;display:flex;flex-direction:column;overflow:hidden}
+
+  header,footer{flex:0 0 auto;display:flex;align-items:center;gap:16px;padding:11px 22px;background:var(--surface)}
+  header{border-bottom:1px solid var(--line)}
+  footer{border-top:1px solid var(--line);gap:13px}
+  .brand{font-weight:700;font-size:14px;display:flex;align-items:center;gap:9px;white-space:nowrap}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);flex:0 0 auto}
+  .crumb{font-family:var(--label);font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .spacer{flex:1}
+  .meta{font-family:var(--label);font-size:12px;color:var(--muted);display:flex;align-items:center;gap:13px;white-space:nowrap}
+  .meta b{color:var(--ink);font-weight:700}
+  .tbtn{font-family:var(--label);font-size:11px;letter-spacing:.08em;text-transform:uppercase;background:transparent;
+    border:1px solid var(--line-strong);color:var(--muted);padding:5px 10px;border-radius:3px;cursor:pointer}
+  .tbtn:hover{color:var(--ink);border-color:var(--accent)}
+  .tbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  .stage-wrap{flex:1;min-height:0;display:grid;place-items:center;padding:18px}
+  .stage{width:min(100%, calc((100vh - 200px) * 16 / 9));aspect-ratio:16/9;position:relative;overflow:hidden;
+    background:var(--surface);border:1px solid var(--line);border-radius:6px;box-shadow:var(--shadow);container-type:size}
+  .slide{position:absolute;inset:0;padding:5.6cqh 6.4cqw;display:flex;flex-direction:column;justify-content:center;gap:2.6cqh;
+    opacity:0;visibility:hidden;transition:opacity .26s ease}
+  .slide.active{opacity:1;visibility:visible}
+  @media (prefers-reduced-motion:reduce){.slide{transition:none}}
+  .slide .body{flex:0 1 auto;display:flex;flex-direction:column;gap:2.2cqh;min-height:0}
+
+  .eyebrow{font-family:var(--label);font-size:1.95cqh;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);
+    display:flex;align-items:center;gap:1.4cqw;font-weight:500}
+  .eyebrow .rule{height:1px;width:4.5cqw;background:var(--line-strong)}
+  .slide h2{margin:0;font-size:4.7cqh;font-weight:700;line-height:1.13;letter-spacing:-.015em;text-wrap:balance}
+  .slide h1.cover-h{margin:0;font-size:6.2cqh;font-weight:700;line-height:1.12;letter-spacing:-.02em;max-width:24ch;text-wrap:balance}
+
+  .cols{display:grid;gap:2.6cqw;align-items:start}
+  .cols.two{grid-template-columns:1fr 1fr}
+  .cols.tri{grid-template-columns:repeat(3,1fr)}
+  .cols.img-l{grid-template-columns:1.15fr .85fr}
+  .cols.img-r{grid-template-columns:.85fr 1.15fr}
+
+  .block{border:1px solid var(--line);border-radius:4px;padding:2.3cqh 2.1cqw;display:flex;flex-direction:column;gap:1.1cqh;background:var(--surface)}
+  .block h3{margin:0;font-family:var(--label);font-size:2.05cqh;font-weight:700;letter-spacing:.04em;color:var(--muted)}
+  .block.accent{border-color:var(--accent);background:var(--accent-soft)}
+  .block.accent h3{color:var(--accent-ink)}
+  .block.signal{border-color:var(--signal);background:var(--signal-soft)}
+  .block.signal h3{color:var(--signal)}
+
+  ul.tick{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:1cqh;font-size:2.4cqh}
+  ul.tick li{position:relative;padding-left:2.3cqw}
+  ul.tick li::before{content:"";position:absolute;left:0;top:.95cqh;width:.85cqw;height:.85cqw;background:var(--accent);border-radius:1px}
+  ul.tick.signal li::before{background:var(--signal)}
+
+  table{width:100%;border-collapse:collapse;font-size:2.1cqh}
+  th,td{text-align:left;padding:1cqh 1.2cqw;border-bottom:1px solid var(--line);vertical-align:top}
+  thead th{font-family:var(--label);font-size:1.7cqh;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line-strong)}
+  tbody tr:last-child td{border-bottom:none}
+  td.num,th.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+  td:first-child{color:var(--ink);font-weight:500}
+  table.compact{font-size:1.9cqh}
+  table.compact th,table.compact td{padding:.8cqh 1cqw}
+
+  .tag{font-family:var(--label);font-size:1.75cqh;font-weight:700;padding:.15cqh .7cqw;border-radius:3px;letter-spacing:.03em}
+  .tag.long{background:var(--accent-soft);color:var(--accent-ink)}
+  .tag.short{background:var(--signal-soft);color:var(--signal)}
+
+  .shot{border:1px solid var(--line);border-radius:4px;overflow:hidden;background:var(--surface-2);display:flex;flex-direction:column;min-height:0}
+  .shot img{width:100%;flex:1;min-height:0;object-fit:contain;display:block;background:#fff}
+  .shot figcaption{font-family:var(--label);font-size:1.6cqh;color:var(--faint);padding:.7cqh 1cqw;border-top:1px solid var(--line);flex:0 0 auto}
+  .shot.empty{border-style:dashed;border-color:var(--line-strong);align-items:center;justify-content:center;text-align:center;padding:3cqh 2cqw;min-height:20cqh}
+  .shot.empty img,.shot.empty figcaption{display:none}
+  .shot.empty::before{content:"🖼  " attr(data-label);color:var(--muted);font-size:2cqh;font-weight:500;max-width:34ch;line-height:1.4}
+  .shot.big{min-height:44cqh}
+  .shot.tall{min-height:52cqh}
+
+  .callout{border-left:3px solid var(--accent);padding:.5cqh 0 .5cqh 1.9cqw;font-size:2.3cqh}
+  .callout.ok{border-color:var(--ok)}
+  .callout.signal{border-color:var(--signal)}
+  .callout b{font-weight:700}
+
+  .goals{display:flex;flex-wrap:wrap;gap:.9cqh 2.4cqw;font-family:var(--label);font-size:1.95cqh;color:var(--muted)}
+  .goals span{white-space:nowrap}
+  .goals b{color:var(--accent-ink);font-weight:700;margin-right:.4cqw}
+  .foot-note{font-size:1.85cqh;color:var(--faint)}
+
+  .cover{justify-content:center;gap:3.2cqh;background:radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0) 0 0/3cqw 3cqw}
+  .cover .kicker{font-family:var(--label);font-size:2cqh;letter-spacing:.2em;text-transform:uppercase;color:var(--accent);font-weight:500}
+  .cover .sub{font-size:2.6cqh;color:var(--muted);max-width:54ch;margin:0}
+  .cover .credits{display:flex;gap:2.2cqw;flex-wrap:wrap;font-family:var(--label);font-size:2cqh;color:var(--muted);margin-top:.8cqh}
+  .cover .credits b{color:var(--ink);font-weight:700}
+
+  .nav{display:flex;align-items:center;gap:7px}
+  .nav button{font-family:var(--label);font-size:13px;background:var(--surface);border:1px solid var(--line-strong);color:var(--ink);
+    width:33px;height:31px;border-radius:3px;cursor:pointer}
+  .nav button:hover{border-color:var(--accent);color:var(--accent)}
+  .nav button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .count{font-family:var(--label);font-size:12.5px;color:var(--muted);min-width:56px}
+  .count b{color:var(--ink)}
+  .track{flex:1;height:6px;border-radius:3px;background:var(--surface-2);position:relative;overflow:hidden;border:1px solid var(--line)}
+  .track .fill{position:absolute;left:0;top:0;bottom:0;background:var(--accent);opacity:.85}
+  .track .apx{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(45deg,var(--line-strong) 0 4px,transparent 4px 8px)}
+  .timebadge{font-family:var(--label);font-size:12px;color:var(--muted)}
+  .timebadge b{color:var(--accent-ink)}
+  .hint{font-family:var(--label);font-size:11px;color:var(--faint);white-space:nowrap}
+
+  .notes{flex:0 0 auto;background:var(--surface-2);border-top:1px solid var(--line);padding:11px 24px;font-size:13.5px;
+    color:var(--ink);display:none;gap:12px;align-items:flex-start;max-height:24vh;overflow:auto}
+  body.show-notes .notes{display:flex}
+  .notes .lbl{font-family:var(--label);font-size:11px;letter-spacing:.04em;color:var(--accent);flex:0 0 auto;padding-top:2px;white-space:nowrap;font-weight:700}
+  .notes p{margin:0;max-width:110ch;line-height:1.55;white-space:pre-line}
+
+  .index{position:fixed;inset:0;background:color-mix(in srgb, var(--paper) 93%, transparent);backdrop-filter:blur(3px);
+    z-index:50;display:none;padding:5vh 6vw;overflow:auto}
+  body.show-index .index{display:block}
+  .index h2{font-family:var(--label);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
+  .index ol{list-style:none;margin:0 0 24px;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:6px}
+  .index li button{width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:9px 12px;
+    cursor:pointer;color:var(--ink);font-family:var(--sans);font-size:13.5px;display:flex;gap:10px;align-items:baseline}
+  .index li button:hover{border-color:var(--accent)}
+  .index li .n{font-family:var(--label);font-size:11px;color:var(--accent);flex:0 0 auto;font-weight:700}
+  .index li .tm{font-family:var(--label);font-size:11px;color:var(--faint);margin-left:auto;flex:0 0 auto}
+
+  @media (max-width:720px){ .stage{width:100%} .meta .hidesm{display:none} header,footer{padding:9px 13px} }
+
+  @media print{
+    @page{size:landscape;margin:11mm}
+    html,body{overflow:visible;height:auto;background:#fff;color:#111}
+    header,footer,.index,.tbtn{display:none!important}
+    .stage-wrap{display:block;padding:0}
+    .stage{width:100%;box-shadow:none;border:none;aspect-ratio:auto;container-type:normal;display:block}
+    .slide{position:relative;inset:auto;opacity:1;visibility:visible;justify-content:flex-start;page-break-after:always;
+      padding:0 0 9mm;gap:5mm;border-bottom:1px solid #ccc;margin-bottom:9mm}
+    .slide h2{font-size:19pt}.eyebrow{font-size:9pt}.eyebrow .rule{width:36px}
+    .body,ul.tick{font-size:10pt}table{font-size:8.5pt}
+    .shot{min-height:auto}.shot img{max-height:78mm}
+    .notes{display:flex!important;background:transparent;border:none;padding:3mm 0 0;max-height:none}
+  }
+</style>
+</head>
+<body class="show-notes">
+
+<header>
+  <div class="brand"><span class="dot"></span>TCAD–ML 역설계 시스템</div>
+  <div class="crumb" id="crumb"></div>
+  <div class="spacer"></div>
+  <div class="meta">
+    <span class="hidesm">대전야호 · 소자/공정</span>
+    <span>발표 <b>8:00</b></span>
+    <button class="tbtn" id="themeBtn">테마</button>
+    <button class="tbtn" id="idxBtn">목차 · O</button>
+    <button class="tbtn" id="noteBtn">노트 · N</button>
+  </div>
+</header>
+
+<div class="stage-wrap">
+  <div class="stage" id="stage">
+
+    <!-- 1 · COVER -->
+    <section class="slide cover active" data-eyebrow="표지" data-time="15">
+      <div class="kicker">2차원 Planar NMOS · Process Reverse Design</div>
+      <h1 class="cover-h">TCAD–Machine Learning 기반 공정 레시피 추천 시스템</h1>
+      <p class="sub">TCAD 데이터와 Random Forest surrogate model로 공정 설계공간을 탐색하고, 최종 후보를 TCAD로 재검증하는 역설계 프레임워크</p>
+      <div class="credits"><span>팀 <b>대전야호</b></span><span>김두형 · 김상윤 · 김정필 · 박상헌 · 이지연</span><span>2026.09.01</span></div>
+      <div class="slide__note" hidden>안녕하세요, 대전야호 팀입니다. 저희는 원하는 소자 특성을 입력하면 그에 맞는 공정 레시피를 추천하고, 그 결과를 TCAD로 다시 검증하는 역설계 시스템을 만들었습니다.</div>
+    </section>
+
+    <!-- 2 · 서론 -->
+    <section class="slide" data-eyebrow="서론 · 보고서 1장" data-time="40">
+      <div class="eyebrow"><span class="rule"></span>서론</div>
+      <h2>왜 이 주제인가 — 문제점과 해결 방향</h2>
+      <div class="body">
+        <div class="cols two">
+          <div class="block">
+            <h3>왜 이 주제인가</h3>
+            <ul class="tick">
+              <li>소자 특성은 공정조건(Gate Length, implant Dose/Energy, 열처리 …)이 결정 → 확인하려면 <b>TCAD 시뮬레이션 필요</b></li>
+              <li>공정변수가 늘수록 조합이 기하급수 증가 → 전 영역 직접 계산은 시간·자원상 불가능</li>
+            </ul>
+          </div>
+          <div class="block signal">
+            <h3>문제점</h3>
+            <ul class="tick signal">
+              <li><b>방향 불일치</b> — TCAD는 "공정 → 특성", 설계자는 "원하는 특성 → 공정"</li>
+              <li><b>탐색 비효율</b> — 기준점 없이 넓게 훑으면 TCAD 자원 낭비</li>
+            </ul>
+          </div>
+        </div>
+        <div class="callout ok"><b>해결 방향.</b> TCAD 결과를 학습한 <b>surrogate model</b>로 유망한 공정 후보만 빠르게 추림 → <b>최종 후보만 TCAD로 재검증</b>하는 역설계 프레임워크</div>
+        <div class="goals">
+          <span><b>①</b> 유효한 공정조건 구분</span><span><b>②</b> 요구 스펙에 가까운 빠른 추천</span><span><b>③</b> TCAD 재입력 시 정확도 유지</span>
+        </div>
+      </div>
+      <div class="slide__note" hidden>반도체 공정조건이 소자 특성을 결정하기 때문에, 특성을 확인하려면 TCAD 시뮬레이션을 돌려야 합니다. 그런데 공정변수가 늘면 조합이 기하급수로 늘어서 전부 계산하는 건 불가능합니다. 더 큰 문제는 방향입니다. TCAD는 공정조건에서 특성으로 가는데, 설계자는 반대로 원하는 특성에서 공정조건을 알고 싶어 합니다. 그래서 저희는 TCAD 결과를 학습한 예측 모델로 유망한 공정 후보만 빠르게 추려내고, 최종 후보만 TCAD로 다시 검증하는 역설계 시스템을 만들었습니다.</div>
+    </section>
+
+    <!-- 3 · 2.1 -->
+    <section class="slide" data-eyebrow="소자 구조 · 보고서 2.1" data-time="20">
+      <div class="eyebrow"><span class="rule"></span>기본 소자와 공정</div>
+      <h2>대상 소자 · 2차원 Planar NMOS</h2>
+      <div class="body">
+        <div class="cols img-r">
+          <div class="block">
+            <h3>공정 순서</h3>
+            <p style="font-size:2.2cqh;margin:0">p-substrate → gate oxide/poly → LDD(As) → Halo(B) → Nitride spacer → S/D(P) → Anneal → Al contact</p>
+            <h3 style="margin-top:1cqh">예측 출력</h3>
+            <p style="font-size:2.2cqh;margin:0"><b>Vth · SS</b> — Vd 0.05 V ID–VG<br><b>Ion · Ioff</b> — Vd 1.0 V (Vg 2.5 V / 0 V)</p>
+          </div>
+          <figure class="shot empty tall" data-label="그림 1 · 2차원 Planar NMOS 공정 단계별 단면 (팀 삽입)"></figure>
+        </div>
+      </div>
+      <div class="slide__note" hidden>대상 소자는 2차원 planar NMOS입니다. 게이트를 형성한 뒤 LDD, Halo, 스페이서, 소스·드레인 주입과 어닐링을 거칩니다. 저희가 예측하는 특성은 문턱전압 Vth, subthreshold swing, on 전류와 off 전류 네 가지입니다.</div>
+    </section>
+
+    <!-- 4 · 2.2 / 2.3 -->
+    <section class="slide" data-eyebrow="Short-channel · 보고서 2.2 · 2.3" data-time="60">
+      <div class="eyebrow"><span class="rule"></span>Long vs Short 분리</div>
+      <h2>왜 두 모델로 나눴나 — 공정 차이</h2>
+      <div class="body">
+        <div class="cols two">
+          <div style="display:flex;flex-direction:column;gap:1.6cqh;min-height:0">
+            <p style="font-size:2.1cqh;margin:0;color:var(--muted)">100 nm 이하에서 <b style="color:var(--signal)">SCE</b>(Drain 전계가 Source barrier에 간섭) → 비정상 turn-on · Vth 추출 실패 · SS 수천 mV/dec. 원인은 250 nm급 공정을 게이트 길이만 축소한 것.</p>
+            <table class="compact">
+              <thead><tr><th>항목</th><th>Long 180–1000 nm</th><th>Short 65 / 90 nm</th></tr></thead>
+              <tbody>
+                <tr><td>Gate oxide</td><td>기존 두께</td><td><b>2.0 / 2.5 nm 박막화</b></td></tr>
+                <tr><td>Halo implant</td><td>불필요</td><td><b>Dose/Energy 변수 추가</b></td></tr>
+                <tr><td>Annealing</td><td>고정</td><td><b>입력변수로 포함</b></td></tr>
+                <tr><td>입력 공정변수</td><td class="num">5 개</td><td class="num">8 개</td></tr>
+              </tbody>
+            </table>
+            <p class="foot-note">→ 입력변수 구성이 달라 하나로 못 묶음 → Short / Long 독립 모델 bundle</p>
+          </div>
+          <figure class="shot" data-label="그림 2">
+            <img src="reports/img/그림2.svg" alt="정상 vs 비정상 ID-VG 및 NetActive 분포"
+              onerror="var f=this.closest('.shot');f.classList.add('empty');f.setAttribute('data-label','그림 2 · 정상 vs 비정상 ID–VG / NetActive (팀 삽입)')">
+            <figcaption>그림 2 · 정상 vs 비정상 ID–VG 및 NetActive 분포</figcaption>
+          </figure>
+        </div>
+      </div>
+      <div class="slide__note" hidden>게이트 길이를 100 nm 아래로 줄이자 문제가 생겼습니다. 짧은 채널에서는 드레인 전계가 소스 쪽 barrier까지 영향을 줘서, 게이트를 올려도 정상적으로 켜지지 않고 문턱전압 추출이 실패하거나 SS가 수천 mV/dec까지 치솟았습니다. 원래 공정이 250 nm급 기준이라 게이트 길이만 줄인 게 원인이었습니다. 그래서 짧은 채널에서는 세 가지를 바꿨습니다. 게이트 산화막을 2 나노 수준으로 얇게 하고, 채널 중앙 barrier를 잡기 위해 Halo 주입의 도즈와 에너지를 새 변수로 넣고, thermal budget에 민감해진 어닐링도 입력에 포함했습니다. 결과적으로 긴 채널은 입력변수 5개, 짧은 채널은 8개로 구성이 완전히 달라졌기 때문에, 하나로 묶지 않고 Short와 Long 모델을 따로 학습했습니다.</div>
+    </section>
+
+    <!-- 5 · 3장 flow -->
+    <section class="slide" data-eyebrow="전체 Flow · 보고서 3장" data-time="50">
+      <div class="eyebrow"><span class="rule"></span>전체 시스템 흐름</div>
+      <h2>전체 Flow와 모델 선택</h2>
+      <div class="body">
+        <figure class="shot" data-label="그림 5" style="min-height:34cqh">
+          <img src="reports/img/그림5.svg" alt="전체 시스템 흐름도"
+            onerror="var f=this.closest('.shot');f.classList.add('empty');f.setAttribute('data-label','그림 5 · TCAD 생성 → 역설계 추천 → TCAD 재검증 (팀 삽입)')">
+          <figcaption>그림 5 · TCAD 데이터 생성 → 역설계 추천 → TCAD 재검증 (6단계)</figcaption>
+        </figure>
+        <div class="block accent">
+          <h3>왜 Random Forest</h3>
+          <ul class="tick">
+            <li>데이터가 수치형 표 형식(5~8 변수)·약 7,800개·변수마다 물리적 의미 명확 → 딥러닝의 복잡도·튜닝 부담이 과함</li>
+            <li>비선형·상호작용 학습 · 낮은 전처리 부담 · <b>SHAP·Feature Importance 해석 용이</b> · 모델당 트리 300개</li>
+          </ul>
+        </div>
+      </div>
+      <div class="slide__note" hidden>전체 흐름입니다. 먼저 TCAD로 공정조건과 특성 데이터를 만들고, 계산이 정상인지 Valid/Invalid 라벨을 답니다. 이 데이터로 공정을 넣으면 특성을 예측하는 Random Forest surrogate를 학습합니다. 사용자가 목표 스펙을 넣으면, 학습 범위 안에서 만든 후보 50만 개를 이 모델로 순식간에 평가해 목표에 가장 가까운 레시피를 뽑고, 최종적으로 TCAD에 다시 넣어 확인합니다. Random Forest를 고른 이유는, 데이터가 수천 개 규모의 표 형식이고 변수마다 물리적 의미가 뚜렷해서 딥러닝은 과했기 때문입니다. Random Forest는 비선형 관계를 잘 잡고, 전처리 부담이 적고, SHAP으로 변수 영향을 해석할 수 있습니다.</div>
+    </section>
+
+    <!-- 6 · 4.1 / 4.2 -->
+    <section class="slide" data-eyebrow="데이터 · 보고서 4.1 · 4.2" data-time="30">
+      <div class="eyebrow"><span class="rule"></span>데이터 구성 / Valid · Invalid</div>
+      <h2>학습 데이터와 라벨링</h2>
+      <div class="body">
+        <div class="cols img-r">
+          <div style="display:flex;flex-direction:column;gap:1.4cqh">
+            <table class="compact">
+              <thead><tr><th>구분</th><th class="num">원시 행</th><th class="num">레시피</th><th class="num">Valid</th><th class="num">Invalid</th></tr></thead>
+              <tbody>
+                <tr><td><span class="tag short">Short</span></td><td class="num">10,144</td><td class="num">5,072</td><td class="num">3,317</td><td class="num">1,755</td></tr>
+                <tr><td><span class="tag long">Long</span></td><td class="num">5,500</td><td class="num">2,750</td><td class="num">2,332</td><td class="num">418</td></tr>
+              </tbody>
+            </table>
+            <div class="callout"><b>Valid = 계산·추출이 정상</b> (성능이 좋다는 뜻 아님) · Invalid = solver fail·출력 누락</div>
+            <p class="foot-note">분류기 = Valid+Invalid 전체 학습 / 회귀기 = Valid & 4출력 정상 레시피만</p>
+          </div>
+          <figure class="shot tall" data-label="그림 4">
+            <img src="reports/img/그림4.svg" alt="학습·추천 단계 classifier–regressor 연결 구조"
+              onerror="var f=this.closest('.shot');f.classList.add('empty');f.setAttribute('data-label','그림 4 · 학습·추천 단계 classifier–regressor 구조 (팀 삽입)')">
+            <figcaption>그림 4 · 학습(분류=전체 / 회귀=Valid만)·추천(P(valid)≥0.5) 구조</figcaption>
+          </figure>
+        </div>
+      </div>
+      <div class="slide__note" hidden>학습 데이터는 Short 약 5천 개, Long 약 2,750개 레시피입니다. Sentaurus에서 계산이 실패했거나 출력이 누락된 레시피를 Invalid로, 정상 추출된 걸 Valid로 라벨했습니다. 주의할 점은 Valid가 성능이 좋다는 뜻이 아니라는 겁니다. SS가 크든 누설이 크든, 계산과 추출만 정상이면 Valid입니다. 분류기는 전체로, 회귀기는 Valid 레시피만으로 학습합니다.</div>
+    </section>
+
+    <!-- 7 · 4.4 -->
+    <section class="slide" data-eyebrow="Forward test · 보고서 4.4" data-time="40">
+      <div class="eyebrow"><span class="rule"></span>Forward test — X→Y</div>
+      <h2>예측 모델 자체의 타당성 검증</h2>
+      <div class="body">
+        <div class="cols img-l">
+          <figure class="shot big" data-label="그림 11">
+            <img src="reports/img/그림11.svg" alt="Forward test와 Inverse test 설계 비교"
+              onerror="var f=this.closest('.shot');f.classList.add('empty');f.setAttribute('data-label','그림 11 · Forward test(상) vs Inverse test(하) 설계 (팀 삽입)')">
+            <figcaption>그림 11 · Forward test(상단) — 보지 않은 X_test로 예측 정확도 측정</figcaption>
+          </figure>
+          <div class="block">
+            <h3>방법 · 의미</h3>
+            <ul class="tick">
+              <li>80% training / 20% hold-out test (random_state 42)</li>
+              <li>분류: 클래스 비율 유지 stratified split / 회귀: 동일 index</li>
+              <li>예측 모델 <b>자체</b>의 정확도 — 역설계 성능을 직접 의미하진 않음</li>
+              <li>구체 R²·MAE 수치 → <b>결론 슬라이드</b>에서 제시</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="slide__note" hidden>모델을 두 가지로 검증했습니다. 첫 번째는 Forward test입니다. 데이터를 80대 20으로 나눠서, 20%는 학습에 전혀 쓰지 않고 예측 오차만 측정합니다. 분류기는 Valid·Invalid 비율을 유지하도록 나누고, 네 개 회귀기는 같은 테스트 레시피에서 평가합니다. 이 시험은 예측 모델 자체가 공정과 특성의 관계를 제대로 배웠는지 보는 기반 시험이고, 구체적인 수치는 뒤 결론에서 함께 보여드리겠습니다.</div>
+    </section>
+
+    <!-- 8 · 4.5 ① -->
+    <section class="slide" data-eyebrow="Inverse test · 보고서 4.5 ①" data-time="45">
+      <div class="eyebrow"><span class="rule"></span>Inverse test — Y→X→TCAD</div>
+      <h2>Y→X 검증을 한 이유 + 사용자 UI</h2>
+      <div class="body">
+        <div class="cols img-r">
+          <div style="display:flex;flex-direction:column;gap:1.4cqh;min-height:0">
+            <div class="block accent">
+              <h3>왜 Inverse test인가 — 우리의 목적</h3>
+              <ul class="tick">
+                <li>Forward는 "공정 → 특성"이 맞는지만 확인</li>
+                <li>추천이 <b>실제 TCAD에서 달성되는지</b>는 별도 검증 필요</li>
+                <li>실제 설계 사양 목표 <b>300건</b> → Top 1 추천 → Sentaurus 재입력 → ① 예측 vs 실제 ② 목표범위 충족</li>
+              </ul>
+            </div>
+            <figure class="shot" data-label="그림 6">
+              <img src="reports/img/그림6.svg" alt="직접 Y-X 대신 X-Y surrogate와 후보 탐색"
+                onerror="var f=this.closest('.shot');f.classList.add('empty');f.setAttribute('data-label','그림 6 · 직접 Y→X 대신 X→Y surrogate + 후보 탐색 (팀 삽입)')">
+              <figcaption>그림 6 · 직접 Y→X 대신 X→Y surrogate + 후보 탐색</figcaption>
+            </figure>
+          </div>
+          <figure class="shot tall" data-label="그림 7">
+            <img src="reports/source/figures/ui_recommendation_screen.png" alt="목표 스펙 입력과 추천 결과 UI"
+              onerror="var f=this.closest('.shot');f.classList.add('empty');f.setAttribute('data-label','그림 7 · 목표 스펙 입력 → 추천 레시피·예상 특성 UI (팀 삽입)')">
+            <figcaption>그림 7 · 목표 스펙 입력 → 추천 공정조건·예상 특성 (Top 3)</figcaption>
+          </figure>
+        </div>
+      </div>
+      <div class="slide__note" hidden>두 번째가 저희의 진짜 목적에 해당하는 Inverse test입니다. 사용자가 UI에 목표 스펙을 넣으면 추천이 나오는데, 그 추천이 실제 TCAD에서도 달성되는지는 Forward test로는 알 수 없습니다. 그래서 실제 설계에서 요구되는 스펙 300건을 목표로 넣고, 나온 Top 1 레시피를 Sentaurus에 다시 입력해서, 모델 예측과 실제 결과의 오차, 그리고 처음 요청한 목표 범위에 들어오는지를 확인했습니다. 화면이 실제 UI인데, 목표를 입력하면 추천 공정조건과 예상 특성이 Top 3까지 나옵니다.</div>
+    </section>
+
+    <!-- 9 · 4.5 ② SHAP -->
+    <section class="slide" data-eyebrow="SHAP · 보고서 4.5 ②" data-time="35">
+      <div class="eyebrow"><span class="rule"></span>SHAP + 미흡 부분 분리</div>
+      <h2>SHAP를 한 이유 · 한계의 분리</h2>
+      <div class="body">
+        <div class="cols img-l">
+          <div class="block accent">
+            <h3>Long 모델 SHAP: 물리 경향 교차 확인</h3>
+            <table class="compact">
+              <thead><tr><th>출력</th><th>최대 기여 변수</th><th>관찰 방향</th></tr></thead>
+              <tbody>
+                <tr><td>Vth</td><td class="num">Lg 32.1%</td><td>짧을수록 ↓</td></tr>
+                <tr><td>Ion</td><td class="num">Lg 59.8%</td><td>짧을수록 ↑</td></tr>
+                <tr><td>Ioff</td><td class="num">Lg 40.6%</td><td>짧을수록 급증</td></tr>
+              </tbody>
+            </table>
+            <p class="foot-note">SHAP은 <b>Long 모델</b>에서 수행. 모델 관계의 설명이지 인과관계의 증명은 아님.</p>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:1.4cqh">
+            <div class="block">
+              <h3>왜 SHAP</h3>
+              <ul class="tick">
+                <li>RF가 잘 맞혀도 <b>어떤 변수가 결과를 움직였는지</b> 모르면 물리 검토 불가</li>
+                <li>변수별 기여도·방향 정량화 → 물리 경향과의 <b>일관성 점검</b>, 목표와 어긋날 때 점검 변수를 안내</li>
+              </ul>
+            </div>
+            <div class="block signal">
+              <h3>미흡 부분 분리</h3>
+              <ul class="tick signal">
+                <li><b>Long</b> — 네 출력 안정 → 추천 도구</li>
+                <li><b>Short</b> — SCE 경계 Vth·SS 오차 → Ioff 배수오차 ≈60× 증폭 → 추가 검증 후보를 좁히는 탐색·진단 도구</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="slide__note" hidden>Long 모델에서는 SHAP으로 어떤 공정변수가 예측값을 움직였는지 확인하고, 그 방향을 알려진 소자물리 경향과 대조했습니다. 예를 들어 게이트 길이가 짧을수록 Vth는 낮아지고 Ioff는 커지는 방향이 나타났습니다. 다만 SHAP은 모델이 학습한 관계를 설명하는 도구이지 인과관계를 증명하는 것은 아닙니다. 이와 별도로 Inverse TCAD 재검증 결과를 보면, 긴 채널은 추천 도구로 활용할 수 있지만 짧은 채널은 SCE 경계에서 오차가 커지고 특히 누설전류가 크게 벌어집니다. 따라서 Short는 정답을 주는 도구가 아니라 추가 검증 후보를 좁히는 탐색·진단 도구로 정의합니다.</div>
+    </section>
+
+    <!-- 10 · 5.1 / 6.1 결론 -->
+    <section class="slide" data-eyebrow="결론 · 보고서 5.1 · 6.1" data-time="120">
+      <div class="eyebrow"><span class="rule"></span>핵심 결과 요약 → 의의</div>
+      <h2>결과와 의의</h2>
+      <div class="body">
+        <div class="cols two">
+          <div class="block">
+            <h3>Forward prediction (표 17)</h3>
+            <table class="compact">
+              <thead><tr><th>모델</th><th>Vth</th><th>SS</th><th>Ion</th><th>Ioff</th></tr></thead>
+              <tbody>
+                <tr><td><span class="tag long">Long</span></td><td class="num">.986 / 6.2 mV</td><td class="num">.994 / 2.66</td><td class="num">.994 / .010 dec</td><td class="num">.794 / .267 dec</td></tr>
+                <tr><td><span class="tag short">Short</span></td><td class="num">.960 / 28 mV</td><td class="num">.831 / .207 dec</td><td class="num">.987 / .609 dec</td><td class="num">.996 / .605 dec</td></tr>
+              </tbody>
+            </table>
+            <p class="foot-note">표기 = R² / MAE(Vth·SS) 또는 log RMSE(Ion·Ioff). 분류 balanced acc: Short 98.35% / Long 99.19%</p>
+          </div>
+          <div class="block accent">
+            <h3>Inverse 재검증 — 300 요청 → 274 고유 → TCAD 100% Valid</h3>
+            <table class="compact">
+              <thead><tr><th>모델</th><th>Vth MAE</th><th>SS MAE</th><th>Ion</th><th>Ioff</th></tr></thead>
+              <tbody>
+                <tr><td><span class="tag long">Long</span></td><td class="num">10.2 mV</td><td class="num">1.47</td><td class="num">×1.04</td><td class="num">×1.92</td></tr>
+                <tr><td><span class="tag short">Short</span></td><td class="num">85.1 mV</td><td class="num">23.2</td><td class="num">×1.33</td><td class="num">×61</td></tr>
+              </tbody>
+            </table>
+            <p class="foot-note">목표범위 만족률 — Long 98.5 / 100 / 100 / 76 % · Short 53 / 84 / 90 / 17 %</p>
+          </div>
+        </div>
+        <div class="callout ok"><b>의의.</b> TCAD 대체가 아니라 <b>재검증 가치가 높은 후보를 빠르게 선별</b>하는 설계 지원 도구 — Long = 추천 / Short = 탐색·진단. 추천 → TCAD 재검증 → 데이터 재편입 반복으로 신뢰성·적용 범위가 점진 확대되고, 제한된 TCAD 자원을 목표 달성 가능성 높은 후보에 집중시킨다.</div>
+      </div>
+      <div class="slide__note" hidden>결론입니다. Forward test에서 Long은 Vth·SS·Ion이 매우 안정적이었고, Ioff는 R² 0.794 및 log RMSE 0.267 decade로 다른 Long 출력보다 상대적으로 불확실성이 큽니다. 문턱전압 오차는 평균 6.2 밀리볼트였습니다. Short는 Vth와 전류의 전체 경향은 학습했지만, 특히 Ioff의 log RMSE가 0.605 decade로 커서 R²만으로 성능을 과대평가하면 안 됩니다. 분류기의 balanced accuracy는 두 모델 모두 98퍼센트를 넘습니다.
+핵심은 Inverse test입니다. 목표 300건에서 나온 274개 고유 레시피를 TCAD에 다시 넣었더니 전부 정상 계산됐습니다. Long은 문턱전압 오차 10 밀리볼트, on-current는 거의 일치했고 목표 범위 만족률도 대부분 100퍼센트에 가깝습니다. Short는 on-current는 안정적이지만 누설전류가 크게 벌어졌습니다.
+그래서 이 시스템의 의의는, TCAD를 대체하는 게 아니라 수많은 공정 후보 중에서 TCAD로 재검증할 가치가 높은 것을 빠르게 골라주는 데 있습니다. 검증된 데이터를 다시 학습에 넣으면서 반복할수록 신뢰성과 적용 범위가 넓어집니다.</div>
+    </section>
+
+    <!-- 11 · 6.2 -->
+    <section class="slide" data-eyebrow="향후 개선 · 보고서 6.2" data-time="25">
+      <div class="eyebrow"><span class="rule"></span>향후 개선</div>
+      <h2>개선 여지와 발전 가능성</h2>
+      <div class="body">
+        <table>
+          <thead><tr><th class="num">순위</th><th>개선 항목</th><th>기대 효과</th></tr></thead>
+          <tbody>
+            <tr><td class="num">1</td><td>65/90 nm 경계·급변 영역 중심 추가 DOE / active learning</td><td>적은 TCAD 추가로 Short 오차 집중 감소</td></tr>
+            <tr><td class="num">2</td><td>Bias sweep 범위 확장 (0–2.5 V → 확대)</td><td>고정 동작점 기준 일관 추출</td></tr>
+            <tr><td class="num">3</td><td>Long-channel에 Halo·gate oxide 두께 변수 추가</td><td>안정성 유지하며 표현력 확장</td></tr>
+            <tr><td class="num">4</td><td>트리 분산 / conformal prediction 기반 불확실성 표시</td><td>Top 1 과신 방지, 재검증 우선순위</td></tr>
+          </tbody>
+        </table>
+        <div class="callout">데이터가 쌓일수록 surrogate 정확도와 적용 범위가 넓어지는 구조 → 발전 여지가 크다.</div>
+      </div>
+      <div class="slide__note" hidden>향후 개선입니다. 짧은 채널 경계 영역에 데이터를 집중 보강하고, bias sweep 범위를 넓히고, 긴 채널에도 Halo와 산화막 두께를 변수로 추가할 계획입니다. 또 Top 1 추천을 과신하지 않도록 불확실성 지표를 함께 제공하려 합니다. 데이터가 쌓일수록 정확도가 올라가는 구조라 발전 여지가 큽니다. 감사합니다.</div>
+    </section>
+
+    <!-- A1 -->
+    <section class="slide" data-eyebrow="Appendix · 보고서 4.3" data-time="APX">
+      <div class="eyebrow"><span class="rule"></span>A1 · 수치 변환</div>
+      <h2>전류·SS의 log₁₀ 학습</h2>
+      <div class="body">
+        <ul class="tick">
+          <li>Ion(~10⁻⁴ A)·Ioff(~10⁻¹² A)를 linear로 함께 학습 → 큰 전류가 loss 지배, 작은 전류 오차 무시</li>
+          <li>예: 예측 10⁻¹² vs 실제 10⁻⁶ A → 6 decade 차이지만 linear squared error ≈ 10⁻¹²로 극소</li>
+          <li>대응: 전류는 <b>log₁₀(|I|)</b>, SS도 극단값 완화 위해 <b>log₁₀(SS)</b> 학습</li>
+          <li>Vth는 linear 유지 · UI 출력 시 10의 거듭제곱으로 복원</li>
+        </ul>
+      </div>
+      <div class="slide__note" hidden>전류가 여러 order로 변해서 그대로 학습하면 큰 값이 손실을 지배합니다. 그래서 전류와 SS는 로그 공간에서 학습했습니다.</div>
+    </section>
+
+    <!-- A2 -->
+    <section class="slide" data-eyebrow="Appendix · 보고서 3.1 · 3.2" data-time="APX">
+      <div class="eyebrow"><span class="rule"></span>A2 · Random Forest 동작</div>
+      <h2>Random Forest 동작 원리</h2>
+      <div class="body">
+        <div class="cols img-l">
+          <figure class="shot big" data-label="그림 3">
+            <img src="reports/img/그림3.svg" alt="TCAD 공정변수로 구성한 Random Forest 개념도"
+              onerror="var f=this.closest('.shot');f.classList.add('empty');f.setAttribute('data-label','그림 3 · Random Forest 개념도 (팀 삽입)')">
+            <figcaption>그림 3 · TCAD 공정변수로 구성한 Random Forest 개념도</figcaption>
+          </figure>
+          <div class="block">
+            <h3>핵심</h3>
+            <ul class="tick">
+              <li>각 트리: bootstrap 표본 + node마다 "어떤 변수를 어떤 기준값으로 나누면 오차가 최대로 줄까" 반복</li>
+              <li>leaf에 그 영역의 평균값 저장</li>
+              <li>최종 예측 = 300개 트리 예측값의 평균 (분류는 확률 종합)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="slide__note" hidden>랜덤 포레스트는 서로 다른 표본으로 학습한 결정 트리 300개의 평균입니다. 각 트리는 오차를 가장 크게 줄이는 분기를 반복해 만듭니다.</div>
+    </section>
+
+    <!-- A2b · UI flow -->
+    <section class="slide" data-eyebrow="Appendix · 보고서 3.5" data-time="APX">
+      <div class="eyebrow"><span class="rule"></span>A2·5 · UI 탐색 flow</div>
+      <h2>UI 기반 공정조건 탐색 flow</h2>
+      <div class="body">
+        <div class="cols img-l">
+          <figure class="shot tall" data-label="그림 8">
+            <img src="reports/img/그림8.svg" alt="UI 기반 공정조건 탐색 flow"
+              onerror="var f=this.closest('.shot');f.classList.add('empty');f.setAttribute('data-label','그림 8 · UI 기반 공정조건 탐색 flow (팀 삽입)')">
+            <figcaption>그림 8 · User 영역(1–10) 탐색 → Validation 영역(11–13) TCAD 재검증</figcaption>
+          </figure>
+          <div class="block">
+            <h3>단계 요약</h3>
+            <ul class="tick">
+              <li>1–3 · Short/Long·이산 Lg·지표 Min–Target–Max 입력</li>
+              <li>5–6 · 후보 생성 → Classifier P(valid) ≥ 0.5 필터</li>
+              <li>7–9 · 4개 Regressor 예측 → 범위 필터·score → Top 1–3</li>
+              <li>11–13 · Top 1 TCAD 재입력 → 실제값·예측값·목표 spec 비교</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="slide__note" hidden>사용자는 채널과 게이트 길이를 고르고 원하는 지표의 범위를 입력합니다. 시스템이 후보를 만들어 분류기로 거르고 회귀기로 예측해 Top 1–3을 보여주고, 성능 검증 단계에서는 Top 1을 TCAD에 다시 넣어 실제값과 비교합니다.</div>
+    </section>
+
+    <!-- A3 -->
+    <section class="slide" data-eyebrow="Appendix · 보고서 5.2" data-time="APX">
+      <div class="eyebrow"><span class="rule"></span>A3 · 평가 지표</div>
+      <h2>평가 지표 정의</h2>
+      <div class="body">
+        <table>
+          <thead><tr><th>지표</th><th>정의 · 해석</th><th>적용</th></tr></thead>
+          <tbody>
+            <tr><td>R²</td><td>실제값 변동 중 모델이 설명한 비율 (정확도 %로 해석 안 함)</td><td>Vth·SS·log current</td></tr>
+            <tr><td>MAE / RMSE</td><td>실제 단위 오차 / 큰 오차·tail에 민감</td><td>Vth·SS</td></tr>
+            <tr><td>log MAE·RMSE</td><td>log₁₀ 공간 오차 (1 decade = 10배, 0.301 ≈ 2배)</td><td>Ion·Ioff</td></tr>
+            <tr><td>목표범위 만족률</td><td>TCAD actual이 min–max 안에 든 비율 (조건부 보조지표)</td><td>inverse suite</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="slide__note" hidden>Vth·SS는 실제 단위로, Ion·Ioff는 로그 공간 오차와 배수오차로 봅니다. R²는 보조 지표입니다.</div>
+    </section>
+
+    <!-- A4 -->
+    <section class="slide" data-eyebrow="Appendix · 보고서 5.3" data-time="APX">
+      <div class="eyebrow"><span class="rule"></span>A4 · Forward 성능 상세</div>
+      <h2>Forward prediction 성능 (표 17)</h2>
+      <div class="body">
+        <table>
+          <thead><tr><th>모델</th><th>Vth</th><th>SS</th><th>Ion</th><th>Ioff</th></tr></thead>
+          <tbody>
+            <tr><td><span class="tag short">Short</span></td><td class="num">R² 0.960 / MAE 28.0 mV</td><td class="num">R² 0.831 / logRMSE 0.207</td><td class="num">R² 0.987 / logRMSE 0.609</td><td class="num">R² 0.996 / logRMSE 0.605</td></tr>
+            <tr><td><span class="tag long">Long</span></td><td class="num">R² 0.986 / MAE 6.20 mV</td><td class="num">R² 0.994 / MAE 2.66</td><td class="num">R² 0.994 / logRMSE 0.010</td><td class="num">R² 0.794 / logRMSE 0.267</td></tr>
+          </tbody>
+        </table>
+        <ul class="tick">
+          <li>분류기 balanced accuracy Short 98.35% / Long 99.19% · ROC-AUC 99.93% / 99.92%</li>
+          <li>Short Ion·Ioff는 높은 R² + 큰 logRMSE 공존 → 경향은 학습, 경계 레시피 전류오차 잔존 → forward R²만으로 역설계 성능 과대평가 금지</li>
+        </ul>
+      </div>
+      <div class="slide__note" hidden>Long은 네 출력 모두 안정적입니다. Short는 Ion·Ioff에서 R²는 높지만 로그 오차가 커서, 이 수치만으로 역설계 성능을 낙관하지 않았습니다.</div>
+    </section>
+
+    <!-- A5 -->
+    <section class="slide" data-eyebrow="Appendix · 보고서 5.4" data-time="APX">
+      <div class="eyebrow"><span class="rule"></span>A5 · Long inverse 상세</div>
+      <h2>Long-channel inverse recommendation</h2>
+      <div class="body">
+        <div class="cols two">
+          <div class="block accent">
+            <h3>출력별 성능 (175개 고유 레시피)</h3>
+            <table class="compact">
+              <thead><tr><th>출력</th><th class="num">설명력</th><th class="num">평균오차</th></tr></thead>
+              <tbody>
+                <tr><td>Vth</td><td class="num">R² 0.935</td><td class="num">MAE 10.2 / RMSE 18.6 mV</td></tr>
+                <tr><td>SS</td><td class="num">R² 0.685</td><td class="num">MAE 1.47 / RMSE 2.50</td></tr>
+                <tr><td>Ion</td><td class="num">logR² 0.982</td><td class="num">logMAE 0.017 (≈1.04×)</td></tr>
+                <tr><td>Ioff</td><td class="num">logR² 0.920</td><td class="num">logMAE 0.282 (≈1.92×)</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="block">
+            <h3>목표범위 만족률</h3>
+            <table class="compact">
+              <thead><tr><th class="num">Vth</th><th class="num">SS</th><th class="num">Ion</th><th class="num">Ioff</th></tr></thead>
+              <tbody><tr><td class="num">98.5%</td><td class="num">100%</td><td class="num">100%</td><td class="num">76%</td></tr></tbody>
+            </table>
+            <p class="foot-note">조건부 결과 — test suite 한정. 200개 요청 → 175개 고유 레시피 전부 정상 계산 → 전체 workflow 실현 가능성 입증.</p>
+          </div>
+        </div>
+      </div>
+      <div class="slide__note" hidden>Long은 200개 요청에서 175개 레시피가 나왔고 전부 정상 계산됐습니다. Vth 10 mV, SS 1.5 mV/dec, on-current는 거의 일치했습니다.</div>
+    </section>
+
+    <!-- A6 -->
+    <section class="slide" data-eyebrow="Appendix · 보고서 5.5" data-time="APX">
+      <div class="eyebrow"><span class="rule"></span>A6 · Short inverse 상세</div>
+      <h2>Short-channel inverse recommendation</h2>
+      <div class="body">
+        <div class="cols two">
+          <div class="block signal">
+            <h3>출력별 절대오차 (99개 레시피)</h3>
+            <table class="compact">
+              <thead><tr><th>출력</th><th class="num">중앙값</th><th class="num">평균 · tail</th></tr></thead>
+              <tbody>
+                <tr><td>Vth</td><td class="num">43.9 mV</td><td class="num">MAE 85.1 / RMSE 142.0</td></tr>
+                <tr><td>SS</td><td class="num">7.1</td><td class="num">MAE 23.2 / RMSE 58.1</td></tr>
+                <tr><td>Ion</td><td class="num">≈1.27×</td><td class="num">logMAE 0.125 (≈1.33×)</td></tr>
+                <tr><td>Ioff</td><td class="num">≈19.8×</td><td class="num">logMAE 1.785 (≈61×)</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="block">
+            <h3>SS–Ioff 결합 · 만족률</h3>
+            <ul class="tick signal">
+              <li>|SS 오차| ↔ |Ioff log 오차| Spearman ρ = 0.586 (p&lt;0.001)</li>
+              <li>subthreshold Id ∝ 10^((Vg−Vth)/SS) → 지수 증폭</li>
+            </ul>
+            <table class="compact">
+              <thead><tr><th class="num">Vth</th><th class="num">SS</th><th class="num">Ion</th><th class="num">Ioff</th></tr></thead>
+              <tbody><tr><td class="num">53%</td><td class="num">84%</td><td class="num">90%</td><td class="num">17%</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="slide__note" hidden>Short는 on-current는 안정적이지만 SCE 경계에서 Vth·SS 오차가 커지고, Ioff는 지수 관계로 60배 수준까지 벌어집니다. 그래서 탐색·진단 도구로 정의했습니다.</div>
+    </section>
+
+    <!-- A7 -->
+    <section class="slide" data-eyebrow="Appendix · 보고서 5.6" data-time="APX">
+      <div class="eyebrow"><span class="rule"></span>A7 · SHAP 물리 타당성</div>
+      <h2>SHAP 기반 물리적 타당성</h2>
+      <div class="body">
+        <div class="cols img-r">
+          <table class="compact">
+            <thead><tr><th>출력</th><th>지배 변수 (기여도)</th><th>방향</th></tr></thead>
+            <tbody>
+              <tr><td>Vth</td><td class="num">Gate Length 32.1%</td><td>짧을수록 ↓ (roll-off)</td></tr>
+              <tr><td>SS</td><td class="num">SD Energy 38.6 / Dose 38.4%</td><td>S/D가 gate control 지배</td></tr>
+              <tr><td>Ion</td><td class="num">Gate Length 59.8%</td><td>짧을수록 ↑ (drive current)</td></tr>
+              <tr><td>Ioff</td><td class="num">Gate Length 40.6%</td><td>짧을수록 급증 (SCE·DIBL)</td></tr>
+            </tbody>
+          </table>
+          <figure class="shot big" data-label="그림 13 · Long 모델 출력별 SHAP beeswarm 분포 (팀 삽입)"></figure>
+        </div>
+        <p class="foot-note">네 출력 모두 방향이 소자물리와 일관 → 물리적으로 의미 있는 관계 학습 (인과의 정량 크기 증명은 아님)</p>
+      </div>
+      <div class="slide__note" hidden>게이트 길이가 짧을수록 Vth가 낮아지고 Ioff가 커지는 등, SHAP 방향이 알려진 소자물리와 일치했습니다.</div>
+    </section>
+
+    <!-- A8 -->
+    <section class="slide" data-eyebrow="Appendix · 보고서 5.7" data-time="APX">
+      <div class="eyebrow"><span class="rule"></span>A8 · 적용 범위</div>
+      <h2>결과 해석 및 적용 범위</h2>
+      <div class="body">
+        <ul class="tick">
+          <li>Forward = DOE 표본화 공정범위 내 <b>interpolation 성능</b></li>
+          <li>Inverse = 274개 고유 레시피 TCAD 재계산으로 예측–실제 오차 직접 측정</li>
+          <li>학습하지 않은 채널 길이·새 공정범위 <b>extrapolation 해석 불가</b> → UI는 학습된 이산 gate length만 선택</li>
+          <li>목표범위 만족률·Valid probability·score는 TCAD 오차의 신뢰구간이 아님</li>
+          <li>출력의 정의: <b>'정답 레시피'가 아니라 'TCAD로 재검증할 가치가 높은 후보 레시피'</b></li>
+        </ul>
+      </div>
+      <div class="slide__note" hidden>이 평가는 학습된 공정공간 안에서의 성능입니다. 학습 안 한 영역으로 확장 해석은 안 되고, 그래서 UI도 학습된 gate length만 고르게 제한했습니다.</div>
+    </section>
+
+    <!-- A9 -->
+    <section class="slide" data-eyebrow="Appendix · 발표 대비" data-time="APX">
+      <div class="eyebrow"><span class="rule"></span>A9 · 예상 질의응답</div>
+      <h2>예상 질의응답</h2>
+      <div class="body">
+        <table class="compact">
+          <thead><tr><th>질문</th><th>답변 요지</th></tr></thead>
+          <tbody>
+            <tr><td>왜 후보 50만 개인가</td><td>탐색 밀도와 응답시간의 절충. 더 늘려도 개선폭 감소·자원만 증가. seed 고정으로 재현성 확보</td></tr>
+            <tr><td>전역 최적해 보장?</td><td>아님. '비교 가능한 여러 후보 중 최선'. 분류기·공정범위 제약·예상특성 제시가 장점</td></tr>
+            <tr><td>Short 모델은 실패인가</td><td>용도가 다름. SCE 영역 진단·후보 선별용. Ioff 민감성은 물리적으로 예견됨</td></tr>
+            <tr><td>학습 안 한 gate length는</td><td>extrapolation 보장 못 함 → UI에서 이산 gate length만 선택 제한</td></tr>
+            <tr><td>딥러닝이 더 낫지 않나</td><td>원리적 불가가 아니라, 현재 데이터 규모·형태에서 튜닝 부담 대비 이점이 작음</td></tr>
+            <tr><td>Valid의 기준</td><td>데이터(계산·추출) 성공 여부. Long은 4출력 non-NaN, Short는 curve validity 판정. 성능 임계값 아님</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="slide__note" hidden>질의응답 대비용 슬라이드입니다.</div>
+    </section>
+
+  </div>
+</div>
+
+<footer>
+  <div class="nav"><button id="prev" aria-label="이전">◀</button><button id="next" aria-label="다음">▶</button></div>
+  <div class="count"><b id="cur">1</b> / <span id="total">20</span></div>
+  <div class="track" id="track"><div class="apx" id="apx"></div><div class="fill" id="fill"></div></div>
+  <div class="timebadge">누적 <b id="elapsed">0:15</b> / 8:00</div>
+  <div class="hint">← → · O 목차 · N 노트 · P 인쇄</div>
+</footer>
+
+<div class="notes"><span class="lbl">발표 멘트</span><p id="noteText"></p></div>
+
+<div class="index" id="index" role="dialog" aria-label="목차">
+  <h2>본편 · 8:00</h2><ol id="idxMain"></ol>
+  <h2>Appendix</h2><ol id="idxApx"></ol>
+</div>
+
+<script>
+(function(){
+  var slides = [].slice.call(document.querySelectorAll('.slide'));
+  var i = 0;
+  var $ = function(id){ return document.getElementById(id); };
+  $('total').textContent = slides.length;
+
+  var times = slides.map(function(s){ var t = s.dataset.time; return t === 'APX' ? null : parseInt(t,10); });
+  var firstApx = times.indexOf(null);
+  var mainCount = firstApx > -1 ? firstApx : slides.length;
+  var mainTotal = times.slice(0, mainCount).reduce(function(a,b){ return a+b; }, 0);
+  if (firstApx > -1){ $('apx').style.left = (mainCount/slides.length*100)+'%'; $('apx').style.right = '0'; }
+  else { $('apx').style.display = 'none'; }
+
+  function fmt(s){ return Math.floor(s/60) + ':' + (s%60<10?'0':'') + (s%60); }
+
+  function render(){
+    slides.forEach(function(s,n){ s.classList.toggle('active', n===i); });
+    var s = slides[i];
+    $('cur').textContent = i+1;
+    $('crumb').textContent = s.dataset.eyebrow || '';
+    var note = s.querySelector('.slide__note');
+    $('noteText').textContent = note ? note.textContent : '';
+    var cum = 0; for (var k=0;k<=i;k++){ cum += (times[k]||0); }
+    if (times[i] === null){ $('fill').style.width = (mainCount/slides.length*100)+'%'; $('elapsed').textContent = 'Appendix'; }
+    else { $('fill').style.width = (cum/mainTotal*mainCount/slides.length*100)+'%'; $('elapsed').textContent = fmt(cum); }
+  }
+  function go(n){ i = Math.max(0, Math.min(slides.length-1, n)); render(); }
+
+  $('prev').onclick = function(){ go(i-1); };
+  $('next').onclick = function(){ go(i+1); };
+  $('stage').addEventListener('click', function(e){
+    if (e.target.closest('a,button,img')) return;
+    go(e.shiftKey ? i-1 : i+1);
+  });
+  document.addEventListener('keydown', function(e){
+    var k = e.key.toLowerCase();
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') go(i+1);
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') go(i-1);
+    else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(slides.length-1);
+    else if (k === 'n') document.body.classList.toggle('show-notes');
+    else if (k === 'o') document.body.classList.toggle('show-index');
+    else if (k === 'p') window.print();
+    else if (e.key === 'Escape') document.body.classList.remove('show-index');
+  });
+  $('noteBtn').onclick = function(){ document.body.classList.toggle('show-notes'); };
+  $('idxBtn').onclick = function(){ document.body.classList.toggle('show-index'); };
+  $('themeBtn').onclick = function(){
+    var r = document.documentElement;
+    var dark = r.getAttribute('data-theme') === 'dark'
+      || (!r.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
+    r.setAttribute('data-theme', dark ? 'light' : 'dark');
+  };
+
+  slides.forEach(function(s,n){
+    var li = document.createElement('li');
+    var b = document.createElement('button');
+    var title = (s.querySelector('h1,h2')||{}).textContent || s.dataset.eyebrow || '';
+    var tm = s.dataset.time === 'APX' ? '' : fmt(parseInt(s.dataset.time,10));
+    b.innerHTML = '<span class="n">'+(n+1)+'</span><span>'+title+'</span><span class="tm">'+tm+'</span>';
+    b.onclick = function(){ go(n); document.body.classList.remove('show-index'); };
+    li.appendChild(b);
+    (s.dataset.time === 'APX' ? $('idxApx') : $('idxMain')).appendChild(li);
+  });
+
+  var qs = new URLSearchParams(location.search).get('slide');
+  if (qs){ var q = parseInt(qs,10); if (q>=1 && q<=slides.length) i = q-1; }
+  render();
+})();
+</script>
+</body>
+</html>

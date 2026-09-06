@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-from batch_validation import classify_existing_case
+from CODE.batch_validation import classify_existing_case
 
 
 TARGETS = ("Vth", "SS", "Ion", "Ioff")
