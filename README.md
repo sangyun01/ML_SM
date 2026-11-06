@@ -259,6 +259,3 @@ python3 app.py       # 추천 UI 서버 (http://127.0.0.1:5000/)
 | `data/training/tcad_training_master.xlsx` | 통합 훈련 데이터 (Short / Long 시트) |
 | `data/inverse_test/` | inverse-test 목표·추천 레시피·TCAD 입출력·평가 지표 |
 | `reports/` | 최종 보고서, 그림, 8분 발표 자료 |
-
----
-*This project was submitted to POLARIS SIF 2026.*
