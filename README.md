@@ -1,15 +1,15 @@
-# SCOUT: Surrogate-guided Candidate Screening for TCAD-verified Process Design
+# TCAD + ML Process Recipe Recommendation for Planar NMOS
 
 > Team-대전야호 (Daejeon-Yaho) · Category: Device / Process
 
 ## Introduction
 
-**SCOUT** is a TCAD–Machine Learning **inverse-design framework** that recommends 2-D planar NMOS process recipes from a target device specification, and re-verifies every recommendation in Sentaurus TCAD.
+This project is a TCAD–Machine Learning **inverse-design framework** that recommends 2-D planar NMOS process recipes from a target device specification, and re-verifies every recommendation in Sentaurus TCAD.
 
 Physically accurate device characteristics require Sentaurus TCAD simulation, but the process design space grows combinatorially with the number of process variables, so exhaustively simulating every recipe is infeasible.
 Designers also work in the *reverse* direction: they start from a desired spec (Vth, SS, Ion, Ioff) and need the process conditions that satisfy it, whereas TCAD only runs process → characteristic.
 
-**SCOUT** closes this gap with a **forward surrogate model** and a **large-scale candidate search**.
+This project closes this gap with a **forward surrogate model** and a **large-scale candidate search**.
 - Speed: a Random Forest surrogate evaluates **500,000 candidate recipes** in seconds, so the expensive TCAD run is reserved for the final Top-1 candidate.
 - Reliability: a **Valid/Invalid classifier** filters out recipes whose TCAD result cannot be trusted *before* regression, and every recommendation is **re-simulated in TCAD** to measure the real error.
 
@@ -28,7 +28,7 @@ TCAD results contain both low-performance devices and results that cannot be tru
 
 Direct Y → X regression is ill-posed: many different recipes produce a similar spec (one-to-many), so an averaged recipe may not be physically valid.
 
-- Instead, SCOUT generates **500,000 candidate recipes** inside the trained min–max range for the selected discrete gate length (Dose log-uniform, Energy / anneal uniform, fixed random seed for reproducibility).
+- Instead, the model generates **500,000 candidate recipes** inside the trained min–max range for the selected discrete gate length (Dose log-uniform, Energy / anneal uniform, fixed random seed for reproducibility).
 - Each candidate is passed through the classifier, then the four regressors, then scored: relative-error² for Vth / SS and log-scale error² for Ion / Ioff.
 - The lowest-score candidate is **Top 1**; the UI shows **Top 1–3** for downstream selection.
 - This is a bounded global search inside the learnable design space, not a proof of global optimum — but every candidate is directly comparable, constraint-aware, and comes with predicted characteristics.
@@ -47,7 +47,7 @@ The overall system operates via a Host–Surrogate–TCAD loop:
 
 1.  Host PC (Web UI, Flask): the user selects Short / Long and a discrete gate length, then enters the Min–Target–Max window for Vth, SS, Ion, Ioff.
 2.  Candidate Generator: builds 500,000 reproducible recipes inside the training min–max range.
-3.  SCOUT Surrogate (scikit-learn):
+3.  Surrogate model (scikit-learn):
     - Classifier: `P(valid) ≥ 0.5` gate.
     - Regressor bank: 4 × Random Forest → predicted Vth / SS / Ion / Ioff (SS, Ion, Ioff learned in log₁₀ space).
     - Scoring: relative-error (Vth, SS) + log-error (Ion, Ioff) → Top 1–3.
@@ -129,20 +129,20 @@ python3 app.py       # launch the recommendation UI (http://127.0.0.1:5000/)
 
 ---
 
-# Korean Version:  SCOUT: TCAD–ML 기반 2차원 Planar NMOS 역설계 및 공정 레시피 추천 시스템
+# Korean Version: TCAD–ML 기반 2차원 Planar NMOS 역설계 및 공정 레시피 추천 시스템
 
 > Team-대전야호 · 출품 분야: 소자 / 공정
 
 ## Introduction
 
-**SCOUT**는 목표 소자 특성으로부터 2차원 planar NMOS 공정 레시피를 추천하고, 모든 추천 결과를 Sentaurus TCAD로 재검증하는 **TCAD–Machine Learning 역설계 프레임워크**입니다.
+이 프로젝트는 목표 소자 특성으로부터 2차원 planar NMOS 공정 레시피를 추천하고, 모든 추천 결과를 Sentaurus TCAD로 재검증하는 **TCAD–Machine Learning 역설계 프레임워크**입니다.
 
 물리적으로 정확한 소자 특성을 확인하려면 Sentaurus TCAD 시뮬레이션이 필요하지만,
 공정변수가 늘수록 가능한 조합 수가 급격히 증가하여 모든 레시피를 직접 시뮬레이션하는 것은 불가능합니다.
 또한 설계자는 보통 *반대 방향*으로 접근합니다. 원하는 스펙(Vth, SS, Ion, Ioff)에서 출발해 이를 만족하는 공정조건을 필요로 하지만,
 TCAD는 공정조건 → 특성 방향으로만 동작합니다.
 
-**SCOUT**는 **forward surrogate model**과 **대규모 후보 탐색**으로 이 간극을 메웁니다.
+이 프로젝트는 **forward surrogate model**과 **대규모 후보 탐색**으로 이 간극을 메웁니다.
 - Speed: Random Forest surrogate가 **후보 레시피 50만 개**를 초 단위로 평가하여, 고비용 TCAD 연산은 최종 Top 1 후보에만 사용합니다.
 - Reliability: **Valid/Invalid 분류기**가 신뢰할 수 없는 TCAD 결과를 회귀 학습 *이전에* 걸러내고, 모든 추천 결과는 **TCAD로 재시뮬레이션**하여 실제 오차를 측정합니다.
 
@@ -161,7 +161,7 @@ TCAD 결과에는 성능이 낮은 소자와, 결과 자체를 신뢰할 수 없
 
 직접 Y → X 회귀는 하나의 정답을 갖지 않습니다. 서로 다른 레시피가 비슷한 스펙을 만들 수 있어(one-to-many), 평균 레시피는 물리적으로 유효하지 않을 수 있습니다.
 
-- 대신 SCOUT는 선택한 이산 Gate Length에서 학습 min–max 범위 안에 **후보 레시피 50만 개**를 생성합니다(Dose는 log-uniform, Energy·anneal은 uniform, 재현을 위해 난수 seed 고정).
+- 대신 이 모델은 선택한 이산 Gate Length에서 학습 min–max 범위 안에 **후보 레시피 50만 개**를 생성합니다(Dose는 log-uniform, Energy·anneal은 uniform, 재현을 위해 난수 seed 고정).
 - 각 후보를 분류기 → 4개 회귀기 순서로 통과시키고, Vth·SS는 상대오차², Ion·Ioff는 log scale 오차²로 score를 계산합니다.
 - score가 가장 작은 후보가 **Top 1**이며, UI에는 후속 선택을 위해 **Top 1–3**을 표시합니다.
 - 학습 가능한 설계영역 안에서 수행하는 제한된 전역 탐색이며 수학적 전역 최적해를 보장하지는 않지만, 모든 후보를 직접 비교할 수 있고 제약조건을 반영하며 예상 특성을 함께 제시합니다.
@@ -180,7 +180,7 @@ TCAD 결과에는 성능이 낮은 소자와, 결과 자체를 신뢰할 수 없
 
 1.  Host PC (Web UI, Flask): 사용자가 Short / Long과 이산 Gate Length를 선택하고, Vth·SS·Ion·Ioff의 Min–Target–Max 범위를 입력합니다.
 2.  Candidate Generator: 학습 min–max 범위 안에 재현 가능한 레시피 50만 개를 생성합니다.
-3.  SCOUT Surrogate (scikit-learn):
+3.  Surrogate 모델 (scikit-learn):
     - Classifier: `P(valid) ≥ 0.5` 게이트.
     - Regressor bank: 4 × Random Forest → 예상 Vth / SS / Ion / Ioff (SS·Ion·Ioff는 log₁₀ 공간에서 학습).
     - Scoring: 상대오차(Vth, SS) + log 오차(Ion, Ioff) → Top 1–3.
